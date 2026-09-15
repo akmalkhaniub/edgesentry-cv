@@ -1,0 +1,26 @@
+{
+  "name": "edgesentry-cv",
+  "version": "1.0.0",
+  "description": "Edge Computer Vision & Serverless Industrial Hazard Sentinel for OpenCV AI AWS Hackathon",
+  "main": "src/spatial_hazard_detector.js",
+  "type": "module",
+  "scripts": {
+    "test": "node test/verify_edgesentry.js",
+    "start": "node test/verify_edgesentry.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {},
+  "keywords": [
+    "opencv",
+    "aws-lambda",
+    "computer-vision",
+    "iot-greengrass",
+    "serverless",
+    "safety",
+    "edge-ai"
+  ],
+  "author": "Antigravity Builder",
+  "license": "MIT"
+}
