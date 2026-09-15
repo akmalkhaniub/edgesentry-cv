@@ -2,12 +2,16 @@ import assert from 'assert';
 import { SpatialHazardDetector } from '../src/spatial_hazard_detector.js';
 import { TemporalEventFilter } from '../src/temporal_event_filter.js';
 import { AWSServerlessDispatcher } from '../src/aws_serverless_dispatcher.js';
+import { DepthAIPipeline } from '../src/depthai_pipeline.js';
+import { GreengrassV2Client } from '../src/greengrass_v2_client.js';
 
-console.log('🧪 Starting EdgeSentry Automated Verification Suite (OpenCV AI AWS Hackathon)...\n');
+console.log('🧪 Starting EdgeSentry Automated Verification Suite (OpenCV AI Competition 2026)...\n');
 
 const detector = new SpatialHazardDetector();
 const filter = new TemporalEventFilter(1500); // 1.5s persistence threshold
 const dispatcher = new AWSServerlessDispatcher();
+const pipeline = new DepthAIPipeline({ modelName: 'yolo26-spatial-safety-fp16.blob' });
+const greengrass = new GreengrassV2Client('EdgeSentry-OAK-D-Camera-01');
 
 // Define polygonal danger zone around automated robotic weld cell
 const robotCellPolygon = [
@@ -45,12 +49,10 @@ console.log(`   ✅ Successfully detected unauthorized intruder "${rawViolations
 // Test 2: Temporal False-Alarm Filtering
 console.log('3️⃣ Testing Temporal Event Filtering (Transient Suppression)...');
 const t0 = 1000000;
-// Frame at t=0s -> should be tracked but suppressed from firing immediately
 const instantAlerts = filter.filter(rawViolations, t0);
 assert(instantAlerts.length === 0, 'Transient event (< 1.5s) must be suppressed');
 console.log('   ✅ Transient detection suppressed correctly at t=0s.');
 
-// Frame at t=1.6s -> should now trigger verified persistent alarm
 const t1 = t0 + 1600;
 const persistentAlerts = filter.filter(rawViolations, t1);
 assert(persistentAlerts.length === 1, 'Persistent violation (>= 1.5s) must trigger verified alarm');
@@ -58,13 +60,36 @@ assert(persistentAlerts[0].durationInsideMs === 1600, 'Duration must be 1600ms')
 console.log(`   🚨 Verified Alarm Triggered after ${persistentAlerts[0].durationInsideMs}ms persistent presence in danger zone.`);
 
 // Test 3: AWS Serverless Event Dispatch
-console.log('4️⃣ Testing AWS Serverless Cloud Dispatch (Lambda / DynamoDB / S3)...');
-const dispatchResult = await dispatcher.dispatch(persistentAlerts[0]);
-assert(dispatchResult.status === 'DISPATCHED_TO_AWS', 'Event status must be DISPATCHED_TO_AWS');
-assert(dispatchResult.s3SnapshotUri.includes('s3://edgesentry-vault-2026/snapshots/'), 'Must construct valid S3 URI');
-console.log('   ☁️ Dispatched Event to AWS:');
-console.log(`      Event ID: ${dispatchResult.eventId}`);
-console.log(`      Target DynamoDB Table: ${dispatchResult.awsDestination.table}`);
-console.log(`      Encrypted S3 Snapshot: ${dispatchResult.s3SnapshotUri}`);
+console.log('4️⃣ Testing AWS EventBridge Serverless Cloud Dispatch...');
+const eventResult = await dispatcher.publishSafetyAlert(persistentAlerts[0]);
+assert(eventResult.status === 'PUBLISHED', 'EventBridge dispatch must succeed');
+assert(eventResult.event.source === 'edgesentry.vision.edge', 'Event source must be edgesentry');
+console.log('   ✅ Dispatched to AWS EventBridge Bus:');
+console.log('      Event ID:', eventResult.event.id);
+console.log('      Detail:', eventResult.event.detail.violationType);
 
-console.log('\n🎉 ALL EDGESENTRY & OPENCV AI AWS TESTS PASSED WITH 100% SUCCESS!\n');
+// Test 4: Luxonis OAK-D & DepthAI 3D Spatial Pipeline
+console.log('5️⃣ Testing Luxonis OAK-D 3D Spatial Calculation (YOLO26)...');
+const frameResult = pipeline.processFrame(detections);
+assert(frameResult.detectionsCount === 2, 'Must process 2 detections');
+assert(typeof frameResult.detections[0].spatial3D.z === 'number', 'Must calculate depth Z in meters');
+assert(frameResult.detections[0].spatial3D.z > 0, 'Depth Z must be positive');
+console.log(`   🎯 Detected spatial coordinates: X=${frameResult.detections[0].spatial3D.x}m, Y=${frameResult.detections[0].spatial3D.y}m, Z=${frameResult.detections[0].spatial3D.z}m`);
+
+// Test 5: AWS IoT Greengrass v2 IPC & MQTT Telemetry
+console.log('6️⃣ Testing AWS IoT Greengrass v2 Edge IPC & Shadow Sync...');
+const ggAlert = await greengrass.publishHazardAlert({
+  violationType: 'CRITICAL_ZONE_INTRUSION',
+  zoneId: 'zone_robot_weld_01',
+  entityId: 'worker_alpha',
+  spatial3D: frameResult.detections[0].spatial3D
+});
+assert(ggAlert.status === 'PUBLISHED', 'Greengrass alert must publish');
+assert(ggAlert.payload.kinesisClipUrl.includes('kinesisvideo'), 'Must generate Kinesis clip URL');
+
+const shadow = await greengrass.updateDeviceShadow({ fps: 30.0, temp: 42.1 });
+assert(shadow.state.reported.status === 'HEALTHY', 'Device shadow must report HEALTHY');
+console.log(`   📡 Greengrass v2 IPC published alert to: ${ggAlert.topic}`);
+console.log(`   📹 Kinesis Video Clip linked: ${ggAlert.payload.kinesisClipUrl}`);
+
+console.log('\n🎉 ALL 6 EDGESENTRY & OPENCV AI AWS TESTS PASSED WITH 100% SUCCESS!\n');

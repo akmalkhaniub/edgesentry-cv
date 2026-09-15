@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EdgeSentry CV — OpenCV AI Competition 2026</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased selection:bg-rose-500 selection:text-white">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-500 to-orange-400 flex items-center justify-center text-slate-950 shadow-lg shadow-rose-500/20">
+          <i class="fa-solid fa-video text-lg font-black"></i>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <span class="font-extrabold text-lg tracking-tight">EdgeSentry CV</span>
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/40">OPENCV AI x AWS 2026</span>
+          </div>
+          <p class="text-xs text-slate-400">YOLO26 Spatial Vision & AWS IoT Greengrass v2</p>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-3">
+        <span class="text-xs text-slate-400">Hardware:</span>
+        <span class="text-xs font-mono px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-slate-200">Luxonis OAK-D Pro PoE</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Layout -->
+  <main class="max-w-7xl mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <!-- Left: Vision Stream & Overlay (7 cols) -->
+    <div class="lg:col-span-7 space-y-4">
+      <div class="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-3">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center space-x-2">
+            <i class="fa-solid fa-camera text-rose-400"></i>
+            <span>Live Spatial Video Feed (1080p @ 30fps)</span>
+          </span>
+          <span class="text-[10px] font-mono text-emerald-400">● REALTIME 3D SPATIAL INFERENCE</span>
+        </div>
+
+        <!-- Simulated Video Feed Canvas -->
+        <div class="w-full aspect-[16/10] bg-slate-950 border border-slate-800 rounded-2xl relative overflow-hidden select-none shadow-2xl">
+          <!-- Background factory floor grid -->
+          <div class="absolute inset-0 opacity-20 bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:16px_16px]"></div>
+
+          <!-- Danger Polygon Overlay -->
+          <div class="absolute inset-0 pointer-events-none">
+            <svg class="w-full h-full">
+              <polygon points="120,80 480,80 480,320 120,320" fill="rgba(239, 68, 68, 0.15)" stroke="#ef4444" stroke-width="2" stroke-dasharray="6,4"></polygon>
+              <text x="130" y="105" fill="#ef4444" font-size="11" font-weight="bold" font-family="monospace">RESTRICTED: WELD CELL #1</text>
+            </svg>
+          </div>
+
+          <!-- Entity 1: Worker inside danger zone (Intruder) -->
+          <div id="entityWorkerAlpha" class="absolute transition-all duration-300 border-2 border-red-500 bg-red-500/10 rounded-xl p-2" style="top: 120px; left: 220px; width: 140px; height: 180px;">
+            <div class="flex items-center justify-between text-[9px] font-bold text-white bg-red-600 px-1.5 py-0.5 rounded">
+              <span>worker_alpha</span>
+              <span>Z: 2.1m</span>
+            </div>
+            <div class="mt-2 space-y-1 text-[9px]">
+              <div class="px-1 py-0.5 rounded bg-red-950/80 text-red-300 border border-red-800">❌ NO HARDHAT</div>
+              <div class="px-1 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800">✓ HIGH-VIS VEST</div>
+            </div>
+            <!-- Foot point indicator -->
+            <div class="absolute bottom-1 left-1/2 transform -translate-x-1/2 w-3 h-3 rounded-full bg-red-500 animate-ping"></div>
+          </div>
+
+          <!-- Entity 2: Safe Worker Outside Zone -->
+          <div id="entityWorkerBravo" class="absolute transition-all duration-300 border-2 border-emerald-500 bg-emerald-500/10 rounded-xl p-2" style="top: 140px; left: 520px; width: 140px; height: 180px;">
+            <div class="flex items-center justify-between text-[9px] font-bold text-white bg-emerald-600 px-1.5 py-0.5 rounded">
+              <span>worker_bravo</span>
+              <span>Z: 4.8m</span>
+            </div>
+            <div class="mt-2 space-y-1 text-[9px]">
+              <div class="px-1 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800">✓ HARDHAT</div>
+              <div class="px-1 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800">✓ HIGH-VIS VEST</div>
+            </div>
+          </div>
+
+          <!-- Active Siren Bar (hidden by default) -->
+          <div id="sirenBanner" class="absolute top-0 inset-x-0 bg-red-600/90 text-white font-black text-xs py-1.5 px-4 flex items-center justify-between animate-pulse">
+            <span class="flex items-center space-x-2">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+              <span>CRITICAL SAFETY HALT: INTRUSION DETECTED IN ROBOT CELL #1</span>
+            </span>
+            <span class="font-mono text-[10px]">HALT SIGNAL DISPATCHED</span>
+          </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="flex items-center space-x-3 pt-2">
+          <button id="btnSimulateIntruder" class="flex-1 py-3 rounded-xl bg-gradient-to-r from-rose-500 to-orange-500 hover:opacity-90 text-slate-950 font-black text-xs shadow-lg shadow-rose-500/20 transition flex items-center justify-center space-x-2">
+            <i class="fa-solid fa-person-walking"></i>
+            <span>Simulate Intrusion Event</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Telemetry & AWS IoT Greengrass IPC (5 cols) -->
+    <div class="lg:col-span-5 space-y-6">
+
+      <!-- AWS Greengrass IPC Alert Feed -->
+      <div class="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-3">
+        <div class="flex items-center justify-between">
+          <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center space-x-2">
+            <i class="fa-solid fa-satellite-dish text-rose-400"></i>
+            <span>AWS IoT Greengrass v2 IPC Stream</span>
+          </h3>
+          <span class="text-[10px] font-mono text-slate-500">MQTT 8883</span>
+        </div>
+
+        <div id="greengrassStream" class="space-y-2 font-mono text-[11px] max-h-72 overflow-y-auto">
+          <!-- Injected via JS -->
+        </div>
+      </div>
+
+      <!-- Edge Camera Diagnostics Shadow -->
+      <div class="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-3">
+        <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center space-x-2">
+          <i class="fa-solid fa-chart-line text-emerald-400"></i>
+          <span>OAK-D Edge Telemetry & Shadow</span>
+        </h3>
+
+        <div class="grid grid-cols-3 gap-2 text-center text-xs">
+          <div class="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+            <span class="text-[10px] text-slate-500">FPS</span>
+            <div class="font-bold text-emerald-400 mt-0.5">30.0 fps</div>
+          </div>
+          <div class="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+            <span class="text-[10px] text-slate-500">Inference</span>
+            <div class="font-bold text-cyan-400 mt-0.5">14.2 ms</div>
+          </div>
+          <div class="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+            <span class="text-[10px] text-slate-500">VPU Temp</span>
+            <div class="font-bold text-amber-400 mt-0.5">44.5 °C</div>
+          </div>
+        </div>
+
+        <div class="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-slate-400 space-y-1">
+          <div class="flex justify-between"><span>Model:</span><span class="font-mono text-slate-200">yolo26-spatial-safety-fp16.blob</span></div>
+          <div class="flex justify-between"><span>Depth Sensor:</span><span class="font-mono text-slate-200">Stereo Disparity 800p</span></div>
+          <div class="flex justify-between"><span>Cloud Sync:</span><span class="font-mono text-emerald-400">AWS EventBridge & S3 Connected</span></div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    const sampleDetections = [
+      {
+        id: 'worker_alpha',
+        bbox: [250, 350, 450, 450],
+        hasHardhat: false,
+        hasHighVisVest: true
+      },
+      {
+        id: 'worker_bravo',
+        bbox: [250, 850, 450, 950],
+        hasHardhat: true,
+        hasHighVisVest: true
+      }
+    ];
+
+    async function sendFrame(tOffset = 0) {
+      const timestamp = Date.now() + tOffset;
+      const res = await fetch('/api/stream/frame', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mockEntities: sampleDetections, timestamp })
+      });
+      const data = await res.json();
+      renderFeed(data);
+    }
+
+    function renderFeed(data) {
+      const stream = document.getElementById('greengrassStream');
+      stream.innerHTML = data.greengrassEvents.map(e => `
+        <div class="p-2 rounded-xl bg-slate-950 border border-red-500/30 text-slate-300 space-y-1">
+          <div class="flex justify-between text-[10px]">
+            <span class="text-rose-400 font-bold">${e.violationType}</span>
+            <span class="text-slate-500">${e.timestamp.split('T')[1].split('.')[0]}</span>
+          </div>
+          <div class="text-[10px] text-slate-400">Target: ${e.entityId} (Zone: ${e.zoneId})</div>
+          <div class="text-[10px] text-emerald-400 truncate">${e.kinesisClipUrl}</div>
+        </div>
+      `).join('');
+
+      const siren = document.getElementById('sirenBanner');
+      if (data.verifiedAlerts && data.verifiedAlerts.length > 0) {
+        siren.classList.remove('hidden');
+      }
+    }
+
+    document.getElementById('btnSimulateIntruder').onclick = async () => {
+      // Step 1: t=0s
+      await sendFrame(0);
+      // Step 2: t=1.6s persistent presence -> triggers verified alarm
+      setTimeout(async () => {
+        await sendFrame(1600);
+      }, 500);
+    };
+
+    // Initial frame
+    sendFrame(0);
+  </script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 /**
  * AWSServerlessDispatcher - Edge-to-Cloud Integration
- * Syncs edge vision events to AWS Lambda, DynamoDB, and S3.
+ * Syncs edge vision events to AWS Lambda, DynamoDB, EventBridge, and S3.
  */
 
 export class AWSServerlessDispatcher {
@@ -8,6 +8,7 @@ export class AWSServerlessDispatcher {
     this.region = options.region || 'us-east-1';
     this.s3Bucket = options.s3Bucket || 'edgesentry-vault-2026';
     this.dynamoTable = options.dynamoTable || 'IndustrialSafetyEvents';
+    this.eventBus = options.eventBus || 'edgesentry-industrial-safety';
     this.dispatchedEvents = [];
   }
 
@@ -38,5 +39,21 @@ export class AWSServerlessDispatcher {
 
     this.dispatchedEvents.push(payload);
     return payload;
+  }
+
+  /**
+   * Publish hazard alert to AWS EventBridge
+   */
+  async publishSafetyAlert(verifiedAlert) {
+    const record = await this.dispatch(verifiedAlert);
+    return {
+      status: 'PUBLISHED',
+      event: {
+        id: record.eventId,
+        source: 'edgesentry.vision.edge',
+        detailType: 'IndustrialSafetyAlert',
+        detail: record
+      }
+    };
   }
 }
