@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: edgesentry-cv
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3005
+    healthCheckPath: /api/health
+    autoDeploy: true

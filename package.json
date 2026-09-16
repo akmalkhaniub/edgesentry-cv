@@ -5,8 +5,12 @@
   "main": "src/spatial_hazard_detector.js",
   "type": "module",
   "scripts": {
+    "start": "node src/server.js",
     "test": "node test/verify_edgesentry.js",
-    "start": "node test/verify_edgesentry.js"
+    "docker:build": "docker build -t edgesentry-cv:latest .",
+    "docker:run": "docker run -d -p 3005:3005 --name edgesentry-cv edgesentry-cv:latest",
+    "docker:compose": "docker compose up -d",
+    "tunnel": "powershell -ExecutionPolicy Bypass -File deploy/free/tunnel.ps1"
   },
   "dependencies": {
     "dotenv": "^16.4.7"
