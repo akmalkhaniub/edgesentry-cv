@@ -1,25 +1,18 @@
-# ==============================================================================
-# Production Dockerfile for EdgeSentry CV
-# ==============================================================================
-FROM node:22-alpine AS dependencies
+# EdgeSentry — Python + OpenCV edge safety monitor
+FROM python:3.12-slim
+
+# OpenCV headless needs a couple of shared libs even in headless mode.
+RUN apt-get update && apt-get install -y --no-install-recommends libglib2.0-0 libgl1 \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
-RUN apk add --no-cache libc6-compat
-COPY package.json ./
-RUN npm install --omit=dev --ignore-scripts
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+COPY edgesentry ./edgesentry
+COPY pyproject.toml README.md ./
+RUN pip install --no-cache-dir .
 
-FROM node:22-alpine AS runner
-WORKDIR /app
-ENV NODE_ENV=production
-ENV PORT=3005
-
-COPY --from=dependencies /app/node_modules ./node_modules
-COPY package.json ./
-COPY src/ ./src/
-
-USER node
-EXPOSE 3005
-
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD wget -qO- http://127.0.0.1:${PORT:-3005}/api/health || exit 1
-
-CMD ["node", "src/server.js"]
+# Default: run the offline synthetic demo. Override CMD to point at a stream:
+#   docker run edgesentry edgesentry --source rtsp://... --zone "360,320;620,320;620,520;360,520"
+ENTRYPOINT ["edgesentry"]
+CMD ["--demo"]

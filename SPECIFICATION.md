@@ -1,6 +1,8 @@
 # Technical Specification: EdgeSentry
 **Project Name:** EdgeSentry (OpenCV AI Competition powered by AWS)  
-**Status:** Ready for Implementation  
+**Status:** Rebuilt in Python + OpenCV (updated 2026-09-18)  
+
+> **Implementation status (2026-09-18):** Rebuilt from the Node prototype (now under `legacy-js/`) into a Python + OpenCV package (`edgesentry/`). Real OpenCV throughout: `cv2.pointPolygonTest` zone intrusion, HSV hi-vis PPE detection, a `cv2.dnn` ONNX detector (HOG where available), `cv2.VideoCapture` streaming with `cv2.polylines`/`putText` annotation, a persistence temporal filter, and boto3 SNS/S3 dispatch with a simulator fallback. 8 pytest cases pass on synthetic frames (no camera/model needed). Not yet run in production: a real RTSP/camera feed, a trained ONNX PPE model, edge hardware/IoT certs, and deployed AWS infra (SAM/CDK, Lambda, DynamoDB).
 **Version:** 1.0.0  
 
 ---

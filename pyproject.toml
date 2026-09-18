@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "edgesentry"
+version = "1.0.0"
+description = "Edge computer-vision safety monitoring on OpenCV with AWS serverless dispatch"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.26", "opencv-python-headless>=4.9"]
+
+[project.optional-dependencies]
+aws = ["boto3>=1.34"]
+dev = ["pytest>=8.0", "boto3>=1.34"]
+
+[project.scripts]
+edgesentry = "edgesentry.cli:main"
+
+[tool.setuptools]
+packages = ["edgesentry"]
