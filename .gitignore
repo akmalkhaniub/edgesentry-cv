@@ -8,3 +8,6 @@ build/
 dist/
 .env
 *.mp4
+
+.coverage
+htmlcov/

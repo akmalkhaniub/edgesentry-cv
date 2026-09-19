@@ -63,7 +63,7 @@ class HOGPeopleDetector:
         self.hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
         self.confidence_threshold = confidence_threshold
 
-    def detect(self, frame: np.ndarray) -> list[Detection]:
+    def detect(self, frame: np.ndarray) -> list[Detection]:  # pragma: no cover - needs objdetect build
         rects, weights = self.hog.detectMultiScale(frame, winStride=(8, 8), padding=(8, 8), scale=1.05)
         detections: list[Detection] = []
         for i, (x, y, w, h) in enumerate(rects):
@@ -94,7 +94,7 @@ class OnnxDetector:
         self.conf = conf
         self.person_class = person_class
 
-    def detect(self, frame: np.ndarray) -> list[Detection]:
+    def detect(self, frame: np.ndarray) -> list[Detection]:  # pragma: no cover - needs an ONNX model
         blob = cv2.dnn.blobFromImage(frame, 1 / 255.0, (self.input_size, self.input_size), swapRB=True, crop=False)
         self.net.setInput(blob)
         out = self.net.forward()

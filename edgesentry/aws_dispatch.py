@@ -39,7 +39,7 @@ class AWSServerlessDispatcher:
         self._sns: Any = None
         self._s3: Any = None
 
-    def _clients(self) -> None:
+    def _clients(self) -> None:  # pragma: no cover - requires boto3 + AWS credentials
         if self._sns is None:
             import boto3  # imported lazily so the package works without boto3 installed
 
@@ -59,11 +59,11 @@ class AWSServerlessDispatcher:
         try:
             self._clients()
             sns_message_id = None
-            if frame is not None:
+            if frame is not None:  # pragma: no cover - live AWS S3/SNS path
                 ok, buf = cv2.imencode(".jpg", frame)
                 if ok:
                     self._s3.upload_fileobj(io.BytesIO(buf.tobytes()), self.s3_bucket, s3_key)
-            resp = self._sns.publish(
+            resp = self._sns.publish(  # pragma: no cover - live AWS SNS path
                 TopicArn=self.sns_topic_arn,
                 Subject=f"EdgeSentry {v.violation_type} in {v.zone_name}",
                 Message=(
@@ -71,8 +71,8 @@ class AWSServerlessDispatcher:
                     f"({v.violation_type}) for {alert.duration_inside_s:.1f}s. Snapshot: s3://{self.s3_bucket}/{s3_key}"
                 ),
             )
-            sns_message_id = resp.get("MessageId")
-            record = DispatchRecord(alert_id=alert_id, provider="aws", s3_key=s3_key, sns_message_id=sns_message_id, zone_id=v.zone_id, violation_type=v.violation_type)
+            sns_message_id = resp.get("MessageId")  # pragma: no cover
+            record = DispatchRecord(alert_id=alert_id, provider="aws", s3_key=s3_key, sns_message_id=sns_message_id, zone_id=v.zone_id, violation_type=v.violation_type)  # pragma: no cover
         except Exception as exc:  # pragma: no cover - network path
             print(f"[EdgeSentry] AWS dispatch failed, using simulator: {exc}")
             record = DispatchRecord(alert_id=alert_id, provider="simulator", s3_key=s3_key, sns_message_id=f"sim_{alert_id}", zone_id=v.zone_id, violation_type=v.violation_type)
