@@ -5,7 +5,7 @@ import argparse
 import json
 import sys
 
-from .detector import HOGPeopleDetector, OnnxDetector
+from .detector import HOGPeopleDetector, OnnxDetector, ContourDetector, MotionDetector
 from .pipeline import EdgeSentryPipeline
 from .synthetic import make_frame
 from .hazard_detector import Detection
@@ -38,7 +38,9 @@ def _demo(pipeline: EdgeSentryPipeline) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="edgesentry", description="Edge CV safety monitoring on OpenCV.")
     parser.add_argument("--source", help="Video file path, RTSP URL, or camera index (e.g. 0).")
-    parser.add_argument("--onnx", help="Optional ONNX detector model path (else HOG people detector).")
+    parser.add_argument("--onnx", help="Optional ONNX detector model path.")
+    parser.add_argument("--detector", choices=["contour", "motion", "hog"], default="contour",
+                        help="Model-free detector when no --onnx: contour (single-frame), motion (MOG2), or hog.")
     parser.add_argument("--zone", action="append", default=[], help="Zone polygon 'x1,y1;x2,y2;x3,y3[...]'. Repeatable.")
     parser.add_argument("--max-frames", type=int, default=None)
     parser.add_argument("--out", help="Optional annotated MP4 output path.")
@@ -55,9 +57,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.demo or not args.source:
         return _demo(pipeline)
 
-    # Live stream needs a real detector: ONNX if supplied, else HOG (full OpenCV only).
+    # Live stream needs a detector. ONNX if supplied; otherwise a model-free backend
+    # (contour by default — works with no trained model or objdetect build).
     if pipeline.detector is None:
-        pipeline.detector = HOGPeopleDetector()
+        if args.detector == "motion":
+            pipeline.detector = MotionDetector()
+        elif args.detector == "hog":
+            pipeline.detector = HOGPeopleDetector()
+        else:
+            pipeline.detector = ContourDetector()
 
     source: str | int = int(args.source) if args.source.isdigit() else args.source
     total_alerts = 0

@@ -112,3 +112,57 @@ class OnnxDetector:
             hi_vis = estimate_hi_vis(frame, bbox)
             detections.append(Detection(id=f"onnx_{i}", bbox=bbox, confidence=round(obj_conf, 3), has_hardhat=hi_vis, has_high_vis_vest=hi_vis))
         return detections
+
+
+class ContourDetector:
+    """Model-free single-frame detector via foreground thresholding + connected components.
+
+    Real OpenCV (cvtColor / threshold / morphologyEx / connectedComponentsWithStats). Detects
+    people/objects that stand out from the background — no trained model or objdetect module
+    needed. Tune `bg_value` to the scene's floor/background intensity.
+    """
+
+    def __init__(self, min_area: int = 800, min_aspect: float = 1.2, bg_value: int = 60, delta: int = 25) -> None:
+        self.min_area = min_area
+        self.min_aspect = min_aspect  # height/width — people are taller than wide
+        self.bg_value = bg_value
+        self.delta = delta
+
+    def detect(self, frame: np.ndarray) -> list[Detection]:
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        # Foreground = pixels that differ from the background intensity.
+        fg = (np.abs(gray.astype(np.int16) - self.bg_value) > self.delta).astype(np.uint8) * 255
+        fg = cv2.morphologyEx(fg, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+        fg = cv2.morphologyEx(fg, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8))
+        n, _labels, stats, _cent = cv2.connectedComponentsWithStats(fg, connectivity=8)
+        detections: list[Detection] = []
+        for i in range(1, n):
+            x, y, w, h, area = stats[i]
+            if area < self.min_area or w == 0 or h / w < self.min_aspect:
+                continue
+            bbox = (int(x), int(y), int(x + w), int(y + h))
+            hi_vis = estimate_hi_vis(frame, bbox)
+            detections.append(Detection(id=f"cc_{i}", bbox=bbox, confidence=1.0, has_hardhat=hi_vis, has_high_vis_vest=hi_vis))
+        return detections
+
+
+class MotionDetector:
+    """Model-free streaming detector via MOG2 background subtraction (stateful across frames)."""
+
+    def __init__(self, min_area: int = 800, history: int = 100, var_threshold: float = 40.0) -> None:
+        self.min_area = min_area
+        self.bg = cv2.createBackgroundSubtractorMOG2(history=history, varThreshold=var_threshold, detectShadows=False)
+
+    def detect(self, frame: np.ndarray) -> list[Detection]:
+        mask = self.bg.apply(frame)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        detections: list[Detection] = []
+        for i, c in enumerate(contours):
+            if cv2.contourArea(c) < self.min_area:
+                continue
+            x, y, w, h = cv2.boundingRect(c)
+            bbox = (int(x), int(y), int(x + w), int(y + h))
+            hi_vis = estimate_hi_vis(frame, bbox)
+            detections.append(Detection(id=f"mog_{i}", bbox=bbox, confidence=1.0, has_hardhat=hi_vis, has_high_vis_vest=hi_vis))
+        return detections
