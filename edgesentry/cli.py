@@ -11,6 +11,32 @@ from .synthetic import make_frame
 from .hazard_detector import Detection
 
 
+def _bench(frames: int = 30) -> int:
+    """Measure pipeline FPS on a synthetic clip. Not a webcam or a trained model."""
+    import time
+
+    pipeline = EdgeSentryPipeline(detector=ContourDetector())
+    pipeline.register_zone("zone_a", [(360, 320), (620, 320), (620, 520), (360, 520)], "Robot Cell A")
+    start = time.perf_counter()
+    alerts = 0
+    for i in range(frames):
+        x = 80 + (i * 12) % 500
+        frame = make_frame(people=[{"bbox": (x, 300, x + 70, 520), "hi_vis": i % 2 == 0}])
+        result = pipeline.process_frame(frame)
+        alerts += len(result.verified)
+    elapsed = time.perf_counter() - start
+    fps = frames / elapsed if elapsed else 0.0
+    print(json.dumps({
+        "detector": "contour",
+        "frames": frames,
+        "elapsed_s": round(elapsed, 3),
+        "fps": round(fps, 2),
+        "verified_alerts": alerts,
+        "note": "Synthetic frames. Not a webcam and not an ONNX model.",
+    }, indent=2))
+    return 0
+
+
 def _demo(pipeline: EdgeSentryPipeline) -> int:
     # A restricted zone in the lower-centre of the frame.
     pipeline.register_zone("zone_a", [(360, 320), (620, 320), (620, 520), (360, 520)], "Robot Cell A")
@@ -45,6 +71,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-frames", type=int, default=None)
     parser.add_argument("--out", help="Optional annotated MP4 output path.")
     parser.add_argument("--demo", action="store_true", help="Run the offline synthetic demo (no camera).")
+    parser.add_argument("--bench", action="store_true", help="Measure FPS on synthetic frames.")
+    parser.add_argument("--frames", type=int, default=30)
     args = parser.parse_args(argv)
 
     detector = OnnxDetector(args.onnx) if args.onnx else None
@@ -53,6 +81,9 @@ def main(argv: list[str] | None = None) -> int:
     for i, spec in enumerate(args.zone):
         pts = [tuple(int(v) for v in pair.split(",")) for pair in spec.split(";")]
         pipeline.register_zone(f"zone_{i}", pts, f"Restricted Zone {i}")
+
+    if args.bench:
+        return _bench(args.frames)
 
     if args.demo or not args.source:
         return _demo(pipeline)
