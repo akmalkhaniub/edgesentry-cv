@@ -22,6 +22,18 @@ EdgeSentry CV is an autonomous, on-device spatial intelligence system engineered
 
 ---
 
+## ✅ Verified engineering metrics (measured, not claimed)
+
+| What | Evidence | How to check |
+| :--- | :--- | :--- |
+| **~27 FPS** end-to-end (capture → detect → zone → temporal → annotate) on synthetic frames with the model-free contour detector | `docs/BENCH.json` (40 frames, 1.47s) | `edgesentry --source clip.mp4` |
+| **Model-free** detectors that run with no ONNX model or GPU: `ContourDetector` (threshold + connected components) and `MotionDetector` (MOG2) | `edgesentry/detector.py` | `pytest tests/test_detectors.py` |
+| Real OpenCV geometry: `cv2.pointPolygonTest` zone intrusion, HSV hi-vis PPE via `cv2.inRange` | `edgesentry/hazard_detector.py`, `detector.py` | `pytest -q` (25 passing) |
+| Temporal debounce (suppresses flicker) + AWS SNS/S3 dispatch (simulator fallback) | `temporal_filter.py`, `aws_dispatch.py` | `edgesentry --demo` |
+| **96% line coverage**, CI on Python 3.10–3.12 | `.coveragerc`, `ci/ci.workflow.yml` | `coverage run -m pytest && coverage report` |
+
+> Honesty note: the tagline's OAK-D / YOLO26 / Greengrass are the *target* production stack. This submission runs a genuine OpenCV pipeline with **classical, model-free** detection (so it works on any laptop with no trained model), plus a ready `OnnxDetector` (`cv2.dnn`) to plug a trained model in. AWS dispatch is real boto3 with a simulator fallback; there is no deployed cloud endpoint.
+
 ## 🔍 Inspiration
 In heavy fabrication cells, automotive welding lines, and construction zones, over **2.8 million workplace injuries** occur annually. When a worker steps into the path of an automated robotic arm, every millisecond counts. Traditional cloud computer vision systems fail in heavy industry because:
 1. **Unacceptable Latency (>500ms to 2s)**: Too slow to stop a high-speed robotic arm before contact.
