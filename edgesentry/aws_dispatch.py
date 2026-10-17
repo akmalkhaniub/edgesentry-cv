@@ -34,7 +34,8 @@ class AWSServerlessDispatcher:
         self.sns_topic_arn = sns_topic_arn or os.environ.get("EDGESENTRY_SNS_TOPIC_ARN")
         self.s3_bucket = s3_bucket or os.environ.get("EDGESENTRY_S3_BUCKET")
         self.region = region or os.environ.get("AWS_REGION", "us-east-1")
-        self.mock = force_mock or not (self.sns_topic_arn and self.s3_bucket and os.environ.get("AWS_ACCESS_KEY_ID"))
+        has_aws_creds = bool(os.environ.get("AWS_ACCESS_KEY_ID") or os.environ.get("AWS_PROFILE") or os.environ.get("LIVE_AWS") == "true")
+        self.mock = force_mock or not (self.sns_topic_arn and self.s3_bucket and has_aws_creds)
         self.records: list[DispatchRecord] = []
         self._sns: Any = None
         self._s3: Any = None
