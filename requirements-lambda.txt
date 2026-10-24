@@ -1,0 +1,4 @@
+# Packaged into the AWS Lambda zip (Python 3.12 / manylinux_2_28 x86_64).
+# boto3 is provided by the Lambda runtime and intentionally not bundled.
+numpy==2.4.4
+opencv-python-headless==5.0.0.93

@@ -1,0 +1,226 @@
+{
+  "measured_at": "2026-10-24T02:07:22Z",
+  "health": {
+    "status": "ok",
+    "opencv": "5.0.0",
+    "configured": {
+      "evidence_bucket": true,
+      "alert_topic": true,
+      "usage_limits": true,
+      "bedrock_enabled": true
+    },
+    "region": "us-east-1"
+  },
+  "modes": {
+    "rules": {
+      "runs": [
+        {
+          "decided_by": "rules",
+          "fallback": null,
+          "decision_accuracy": 1.0,
+          "false_estops": 0,
+          "guardrail_blocks": 0,
+          "steps": 7,
+          "evidence_stored": 4,
+          "alerts_published": 3,
+          "lambda_ms": {
+            "render_ms": 0,
+            "perception_ms": 490,
+            "perception_fps": 49.0,
+            "agent_ms": 302,
+            "total_ms": 792
+          },
+          "round_trip_s": 2.79
+        },
+        {
+          "decided_by": "rules",
+          "fallback": null,
+          "decision_accuracy": 1.0,
+          "false_estops": 0,
+          "guardrail_blocks": 0,
+          "steps": 7,
+          "evidence_stored": 4,
+          "alerts_published": 3,
+          "lambda_ms": {
+            "render_ms": 0,
+            "perception_ms": 490,
+            "perception_fps": 48.9,
+            "agent_ms": 205,
+            "total_ms": 696
+          },
+          "round_trip_s": 2.6
+        },
+        {
+          "decided_by": "rules",
+          "fallback": null,
+          "decision_accuracy": 1.0,
+          "false_estops": 0,
+          "guardrail_blocks": 0,
+          "steps": 7,
+          "evidence_stored": 4,
+          "alerts_published": 3,
+          "lambda_ms": {
+            "render_ms": 0,
+            "perception_ms": 494,
+            "perception_fps": 48.5,
+            "agent_ms": 217,
+            "total_ms": 712
+          },
+          "round_trip_s": 2.56
+        },
+        {
+          "decided_by": "rules",
+          "fallback": null,
+          "decision_accuracy": 1.0,
+          "false_estops": 0,
+          "guardrail_blocks": 0,
+          "steps": 7,
+          "evidence_stored": 4,
+          "alerts_published": 3,
+          "lambda_ms": {
+            "render_ms": 0,
+            "perception_ms": 497,
+            "perception_fps": 48.2,
+            "agent_ms": 222,
+            "total_ms": 720
+          },
+          "round_trip_s": 2.66
+        },
+        {
+          "decided_by": "rules",
+          "fallback": null,
+          "decision_accuracy": 1.0,
+          "false_estops": 0,
+          "guardrail_blocks": 0,
+          "steps": 7,
+          "evidence_stored": 4,
+          "alerts_published": 3,
+          "lambda_ms": {
+            "render_ms": 0,
+            "perception_ms": 497,
+            "perception_fps": 48.2,
+            "agent_ms": 245,
+            "total_ms": 743
+          },
+          "round_trip_s": 2.58
+        }
+      ],
+      "summary": {
+        "n": 5,
+        "all_correct": 5,
+        "false_estops": 0,
+        "perception_ms_median_warm": 495.5,
+        "perception_fps_median_warm": 48.35,
+        "decision_ms_median_warm": 219.5,
+        "round_trip_s_median_warm": 2.59,
+        "evidence_stored_per_run": 4,
+        "alerts_published_per_run": 3
+      }
+    },
+    "bedrock": {
+      "runs": [
+        {
+          "decided_by": "bedrock",
+          "fallback": null,
+          "decision_accuracy": 1.0,
+          "false_estops": 0,
+          "guardrail_blocks": 0,
+          "steps": 8,
+          "evidence_stored": 4,
+          "alerts_published": 3,
+          "lambda_ms": {
+            "render_ms": 0,
+            "perception_ms": 498,
+            "perception_fps": 48.1,
+            "agent_ms": 6591,
+            "total_ms": 7090
+          },
+          "round_trip_s": 8.97
+        },
+        {
+          "decided_by": "bedrock",
+          "fallback": null,
+          "decision_accuracy": 1.0,
+          "false_estops": 0,
+          "guardrail_blocks": 1,
+          "steps": 10,
+          "evidence_stored": 4,
+          "alerts_published": 3,
+          "lambda_ms": {
+            "render_ms": 0,
+            "perception_ms": 483,
+            "perception_fps": 49.6,
+            "agent_ms": 9102,
+            "total_ms": 9585
+          },
+          "round_trip_s": 11.7
+        },
+        {
+          "decided_by": "bedrock",
+          "fallback": null,
+          "decision_accuracy": 1.0,
+          "false_estops": 0,
+          "guardrail_blocks": 0,
+          "steps": 8,
+          "evidence_stored": 4,
+          "alerts_published": 3,
+          "lambda_ms": {
+            "render_ms": 0,
+            "perception_ms": 485,
+            "perception_fps": 49.5,
+            "agent_ms": 7208,
+            "total_ms": 7693
+          },
+          "round_trip_s": 9.54
+        },
+        {
+          "decided_by": "bedrock",
+          "fallback": null,
+          "decision_accuracy": 1.0,
+          "false_estops": 0,
+          "guardrail_blocks": 0,
+          "steps": 7,
+          "evidence_stored": 4,
+          "alerts_published": 3,
+          "lambda_ms": {
+            "render_ms": 0,
+            "perception_ms": 489,
+            "perception_fps": 49.0,
+            "agent_ms": 5277,
+            "total_ms": 5766
+          },
+          "round_trip_s": 7.62
+        },
+        {
+          "decided_by": "bedrock",
+          "fallback": null,
+          "decision_accuracy": 1.0,
+          "false_estops": 0,
+          "guardrail_blocks": 0,
+          "steps": 8,
+          "evidence_stored": 4,
+          "alerts_published": 3,
+          "lambda_ms": {
+            "render_ms": 0,
+            "perception_ms": 488,
+            "perception_fps": 49.2,
+            "agent_ms": 7361,
+            "total_ms": 7849
+          },
+          "round_trip_s": 9.69
+        }
+      ],
+      "summary": {
+        "n": 5,
+        "all_correct": 5,
+        "false_estops": 0,
+        "perception_ms_median_warm": 486.5,
+        "perception_fps_median_warm": 49.35,
+        "decision_ms_median_warm": 7284.5,
+        "round_trip_s_median_warm": 9.614999999999998,
+        "evidence_stored_per_run": 4,
+        "alerts_published_per_run": 3
+      }
+    }
+  }
+}

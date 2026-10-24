@@ -1,0 +1,696 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EdgeSentry — Robot Cell Safety</title>
+<meta name="description" content="EdgeSentry watches a robot work-cell camera with OpenCV 5 and decides the safe action: stop the robot, call a supervisor, or keep monitoring.">
+<script>
+  // Apply the saved/OS theme before first paint (no flash).
+  (function () {
+    var t = null;
+    try { t = localStorage.getItem('theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+<style>
+  :root, :root[data-theme="light"] {
+    --bg-page: #f1f5f9; --bg-surface: #ffffff; --bg-muted: #f8fafc; --bg-inset: #eef2f7;
+    --text-primary: #0f172a; --text-secondary: #475569; --text-faint: #64748b;
+    --border: #e2e8f0; --border-strong: #cbd5e1;
+    --accent: #4f46e5; --accent-hover: #4338ca; --accent-soft: #eef2ff; --on-accent: #ffffff;
+    --stop: #b91c1c; --stop-soft: #fef2f2; --stop-border: #fecaca;
+    --approve: #b45309; --approve-soft: #fffbeb; --approve-border: #fde68a;
+    --log: #475569; --log-soft: #f1f5f9; --log-border: #cbd5e1;
+    --ok: #15803d; --ok-soft: #f0fdf4; --ok-border: #bbf7d0;
+    --shadow: 0 1px 2px rgba(15, 23, 42, .06), 0 1px 3px rgba(15, 23, 42, .08);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg-page: #0b0f19; --bg-surface: #111827; --bg-muted: #0f172a; --bg-inset: #1e293b;
+    --text-primary: #f8fafc; --text-secondary: #94a3b8; --text-faint: #8b9ab0;
+    --border: #273449; --border-strong: #334155;
+    --accent: #818cf8; --accent-hover: #a5b4fc; --accent-soft: #1e1b4b; --on-accent: #0b0f19;
+    --stop: #f87171; --stop-soft: #2a1215; --stop-border: #7f1d1d;
+    --approve: #fbbf24; --approve-soft: #2a1f0b; --approve-border: #78350f;
+    --log: #a3b1c6; --log-soft: #172033; --log-border: #334155;
+    --ok: #4ade80; --ok-soft: #0f2418; --ok-border: #14532d;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg-page); color: var(--text-primary);
+    font: 15px/1.55 Inter, "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+  a { color: var(--accent); }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 0 20px; }
+  .card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); }
+  .muted { color: var(--text-secondary); }
+  .faint { color: var(--text-faint); font-size: 13px; }
+  [hidden] { display: none !important; }
+
+  /* Top bar */
+  .topbar { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg-page) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); }
+  .topbar .wrap { display: flex; align-items: center; gap: 12px; height: 60px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 17px; letter-spacing: -.01em; }
+  .brand svg { width: 26px; height: 26px; color: var(--accent); }
+  .brand small { font-weight: 450; color: var(--text-secondary); font-size: 13px; }
+  .spacer { flex: 1; }
+  .status { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); padding: 5px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg-surface); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-faint); }
+  .dot.on { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); }
+  .icon-btn { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-surface); transition: border-color .15s ease-out; }
+  .icon-btn:hover { border-color: var(--accent); }
+  .icon-btn svg { width: 18px; height: 18px; }
+  [data-theme="dark"] .sun, :root:not([data-theme="dark"]) .moon { display: none; }
+
+  /* Hero */
+  main { padding: 22px 0 60px; display: grid; gap: 18px; }
+  .hero { display: grid; grid-template-columns: 1fr auto; gap: 22px; align-items: center; padding: 24px 26px; }
+  .eyebrow { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint); }
+  .hero h1 { margin: 4px 0 6px; font-size: 26px; line-height: 1.2; letter-spacing: -.02em; }
+  .hero p { margin: 0; max-width: 62ch; color: var(--text-secondary); }
+  .controls { display: grid; gap: 10px; justify-items: end; }
+  .hero.compact { padding: 16px 22px; } .hero.compact p, .hero.compact #runHint { display: none; } .hero.compact h1 { font-size: 20px; margin: 2px 0 0; }
+  .hero.compact .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .seg { display: inline-flex; padding: 3px; border-radius: 11px; background: var(--bg-inset); border: 1px solid var(--border); }
+  .seg button { border: 0; background: transparent; padding: 7px 14px; border-radius: 8px; font-size: 14px; font-weight: 550; color: var(--text-secondary); transition: background .15s ease-out, color .15s ease-out; }
+  .seg button[aria-checked="true"] { background: var(--bg-surface); color: var(--text-primary); box-shadow: var(--shadow); outline: 1px solid var(--border-strong); }
+  .primary { border: 0; background: var(--accent); color: var(--on-accent); font-weight: 650; padding: 11px 22px; border-radius: 10px; font-size: 15px; transition: background .15s ease-out, transform .05s; display: inline-flex; gap: 10px; align-items: center; }
+  .primary:hover { background: var(--accent-hover); }
+  .primary:active { transform: scale(.99); }
+  .primary[disabled] { opacity: .7; cursor: progress; }
+  .spinner { width: 15px; height: 15px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Empty state */
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .step { padding: 18px 20px; }
+  .step .n { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 13px; }
+  .step h3 { margin: 10px 0 4px; font-size: 15px; }
+  .step p { margin: 0; color: var(--text-secondary); font-size: 14px; }
+
+  /* Outcome */
+  .outcome { display: grid; grid-template-columns: repeat(3, 1fr) minmax(220px, 1.1fr); gap: 12px; }
+  .tile { padding: 14px 18px; border-radius: 14px; border: 1px solid var(--border); background: var(--bg-surface); box-shadow: var(--shadow); }
+  .tile .num { font-size: 30px; font-weight: 700; line-height: 1.1; letter-spacing: -.02em; }
+  .tile .lbl { font-size: 14px; color: var(--text-secondary); }
+  .tile.stop { background: var(--stop-soft); border-color: var(--stop-border); } .tile.stop .num { color: var(--stop); }
+  .tile.approve { background: var(--approve-soft); border-color: var(--approve-border); } .tile.approve .num { color: var(--approve); }
+  .tile.log .num { color: var(--log); }
+  .tile.check .num { font-size: 22px; }
+  .tile.check.good .num { color: var(--ok); }
+  .notice { padding: 12px 16px; border-radius: 12px; border: 1px solid var(--approve-border); background: var(--approve-soft); font-size: 14px; }
+  .notice.err { border-color: var(--stop-border); background: var(--stop-soft); }
+
+  /* Workspace */
+  .workspace { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(340px, 1fr); gap: 18px; align-items: start; }
+  .workspace.wide { grid-template-columns: minmax(0, 1fr) 0; }
+  .workspace.wide .side { display: none; }
+  .player { padding: 14px; display: grid; gap: 12px; position: relative; }
+  .stage { position: relative; border-radius: 10px; overflow: hidden; background: #000; aspect-ratio: 16 / 9; }
+  .stage img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .stage .ts { position: absolute; right: 10px; top: 10px; background: rgba(0, 0, 0, .65); color: #fff; font: 600 12px/1 ui-monospace, Consolas, monospace; padding: 6px 8px; border-radius: 6px; }
+  .bar { display: grid; grid-template-columns: auto 1fr auto auto; gap: 12px; align-items: center; }
+  .scrub { position: relative; padding-bottom: var(--marks-h, 14px); }
+  .scrub input { width: 100%; accent-color: var(--accent); margin: 0; }
+  .marks { position: absolute; left: 8px; right: 8px; top: 22px; }
+  .mark { position: absolute; width: 12px; height: 12px; margin-left: -6px; border-radius: 3px; border: 2px solid var(--bg-surface); padding: 0; }
+  .mark.stop { background: var(--stop); } .mark.approve { background: var(--approve); } .mark.log { background: var(--log); }
+  .clock { font: 13px ui-monospace, Consolas, monospace; color: var(--text-secondary); white-space: nowrap; }
+  .summary { padding: 14px 16px; border-radius: 10px; background: var(--bg-muted); border: 1px solid var(--border); }
+  .summary h4 { margin: 0 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-faint); }
+  .prose p { margin: 0 0 8px; } .prose p:last-child { margin: 0; }
+  .prose ul, .prose ol { margin: 4px 0 8px; padding-left: 20px; }
+  .prose code { font: 13px ui-monospace, Consolas, monospace; background: var(--bg-inset); padding: 1px 5px; border-radius: 5px; }
+
+  .side { display: grid; gap: 0; overflow: hidden; }
+  .side-head { display: flex; align-items: center; gap: 8px; padding: 10px 10px 0 12px; }
+  .tabs { display: flex; gap: 4px; padding: 3px; background: var(--bg-inset); border-radius: 11px; border: 1px solid var(--border); flex: 1; }
+  .tab { flex: 1; border: 0; background: transparent; padding: 8px 10px; border-radius: 8px; font-size: 14px; font-weight: 550; color: var(--text-secondary); white-space: nowrap; }
+  .tab:hover { color: var(--text-primary); }
+  .tab[aria-selected="true"] { background: var(--bg-surface); color: var(--text-primary); box-shadow: var(--shadow); outline: 1px solid var(--border-strong); }
+  .tab .count { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 4px; border-radius: 999px; background: var(--bg-inset); font-size: 12px; }
+  .tab[aria-selected="true"] .count { background: var(--accent-soft); color: var(--accent); }
+  .panel { padding: 12px; max-height: 760px; overflow: auto; }
+
+  /* Decision cards */
+  .dec { border: 1px solid var(--border); border-left: 4px solid var(--log); border-radius: 12px; padding: 12px; display: grid; gap: 10px; background: var(--bg-surface); margin-bottom: 12px; }
+  .dec.stop { border-left-color: var(--stop); } .dec.approve { border-left-color: var(--approve); }
+  .dec.focus { box-shadow: 0 0 0 2px var(--accent); }
+  .dec-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .tid { font: 700 13px ui-monospace, Consolas, monospace; padding: 2px 8px; border-radius: 6px; background: var(--bg-inset); }
+  .pill { font-size: 13px; font-weight: 650; padding: 3px 10px; border-radius: 999px; border: 1px solid; }
+  .pill.stop { color: var(--stop); background: var(--stop-soft); border-color: var(--stop-border); }
+  .pill.approve { color: var(--approve); background: var(--approve-soft); border-color: var(--approve-border); }
+  .pill.log { color: var(--log); background: var(--log-soft); border-color: var(--log-border); }
+  .pill.ok { color: var(--ok); background: var(--ok-soft); border-color: var(--ok-border); }
+  .dec-body { display: grid; grid-template-columns: 150px 1fr; gap: 12px; }
+  .thumb { border: 0; padding: 0; border-radius: 8px; overflow: hidden; background: #000; aspect-ratio: 16 / 9; align-self: start; }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .2s ease-out; }
+  .thumb:hover img { transform: scale(1.04); }
+  .facts { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 14px; }
+  .facts li { display: flex; gap: 8px; }
+  .facts .k { color: var(--text-faint); min-width: 92px; }
+  .callout { font-size: 13.5px; padding: 8px 10px; border-radius: 8px; background: var(--accent-soft); color: var(--text-primary); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
+  .delivery { font-size: 13px; color: var(--text-secondary); display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .delivery .ok { color: var(--ok); font-weight: 600; } .delivery .bad { color: var(--stop); font-weight: 600; }
+  .human { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding-top: 2px; }
+  .btn { border: 1px solid var(--border-strong); background: var(--bg-surface); padding: 6px 12px; border-radius: 8px; font-size: 13.5px; font-weight: 600; transition: border-color .15s ease-out; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.danger { color: var(--stop); border-color: var(--stop-border); }
+  .btn.danger:hover { border-color: var(--stop); }
+  details.reason > summary, details.raw > summary { cursor: pointer; font-size: 13px; color: var(--text-secondary); font-weight: 550; }
+  details.reason p { margin: 6px 0 0; font-size: 14px; }
+
+  /* Trace */
+  .trace { list-style: none; margin: 0; padding: 0; position: relative; }
+  .trace li { position: relative; padding: 0 0 14px 40px; }
+  .trace li::before { content: ""; position: absolute; left: 13px; top: 28px; bottom: 0; width: 2px; background: var(--border); }
+  .trace li:last-child::before { display: none; }
+  .trace .num { position: absolute; left: 0; top: 0; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--bg-inset); border: 1px solid var(--border-strong); }
+  .trace .t { font-weight: 600; font-size: 14.5px; }
+  .trace .why { font-size: 13.5px; color: var(--text-secondary); margin: 2px 0 4px; }
+  .trace .out { font-size: 13.5px; }
+  .trace li.perceive .num { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+  .trace li.stop .num { background: var(--stop-soft); color: var(--stop); border-color: var(--stop-border); }
+  .trace li.approve .num { background: var(--approve-soft); color: var(--approve); border-color: var(--approve-border); }
+  .trace li.blocked .t { color: var(--stop); }
+  .trace li.blocked .num { background: var(--stop); color: #fff; border-color: transparent; }
+  .trace li.nudge .num { background: var(--approve-soft); color: var(--approve); }
+  pre.json { margin: 6px 0 0; padding: 10px; border-radius: 8px; background: var(--bg-muted); border: 1px solid var(--border); font: 12px/1.5 ui-monospace, Consolas, monospace; overflow: auto; max-height: 260px; white-space: pre-wrap; word-break: break-word; }
+  .j-k { color: var(--accent); } .j-s { color: var(--ok); } .j-n { color: var(--approve); } .j-b { color: var(--stop); }
+
+  /* Scenario check */
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-faint); font-weight: 600; }
+  .yes { color: var(--ok); font-weight: 700; } .no { color: var(--stop); font-weight: 700; }
+
+  /* Secondary sections */
+  details.section { padding: 0; overflow: hidden; }
+  details.section > summary { list-style: none; cursor: pointer; padding: 16px 20px; display: flex; align-items: center; gap: 10px; font-weight: 600; }
+  details.section > summary::-webkit-details-marker { display: none; }
+  details.section > summary .chev { transition: transform .15s ease-out; color: var(--text-faint); }
+  details.section[open] > summary .chev { transform: rotate(90deg); }
+  details.section > summary .faint { font-weight: 450; }
+  .section-body { padding: 0 20px 20px; }
+  .arch { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; align-items: stretch; }
+  .arch .box { border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: var(--bg-muted); font-size: 13.5px; }
+  .arch .box b { display: block; font-size: 14px; margin-bottom: 2px; }
+  .arch .box ul { margin: 6px 0 0; padding-left: 16px; color: var(--text-secondary); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; font-size: 14px; margin: 0 0 12px; }
+  .kv dt { color: var(--text-faint); } .kv dd { margin: 0; }
+
+  @media (max-width: 980px) {
+    .hero { grid-template-columns: 1fr; } .controls { justify-items: start; }
+    .workspace, .workspace.wide { grid-template-columns: 1fr; }
+    .workspace.wide .side { display: grid; }
+    .outcome { grid-template-columns: repeat(3, 1fr); } .tile.check { grid-column: 1 / -1; }
+    .arch { grid-template-columns: 1fr 1fr; }
+    #btnPanel { display: none; }
+  }
+  @media (max-width: 640px) {
+    .wrap { padding: 0 16px; }
+    .brand small, .status .txt { display: none; }
+    .steps { grid-template-columns: 1fr; }
+    .outcome { grid-template-columns: 1fr 1fr 1fr; gap: 8px; } .tile { padding: 10px 12px; } .tile .num { font-size: 24px; } .tile .lbl { font-size: 12.5px; }
+    .dec-body { grid-template-columns: 1fr; }
+    .arch { grid-template-columns: 1fr; }
+    .hero { padding: 18px; } .hero h1 { font-size: 22px; }
+    .tab { padding: 8px 6px; font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>
+      EdgeSentry <small>Robot-cell safety</small>
+    </div>
+    <div class="spacer"></div>
+    <span class="status" id="status" title="Service status"><span class="dot" id="statusDot"></span><span class="txt" id="statusText">Checking…</span></span>
+    <button class="icon-btn" id="btnTheme" aria-label="Switch light or dark theme" title="Switch theme">
+      <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+    </button>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="card hero" aria-labelledby="heroTitle">
+    <div>
+      <div class="eyebrow">Robot Cell A · Work-cell camera</div>
+      <h1 id="heroTitle">Check the cell before the robot moves</h1>
+      <p>EdgeSentry watches the camera with OpenCV 5, confirms who is really inside the hazard zone, and takes the safe action: stop the robot, ask a supervisor, or keep monitoring.</p>
+    </div>
+    <div class="controls">
+      <div class="seg" role="radiogroup" aria-label="Who decides">
+        <button role="radio" aria-checked="true" data-mode="bedrock">AI safety agent</button>
+        <button role="radio" aria-checked="false" data-mode="rules">Fixed policy</button>
+      </div>
+      <button class="primary" id="btnRun"><span id="runLabel">Run safety check</span></button>
+      <span class="faint" id="runHint">Analyzes a 6-second, 24-frame clip.</span>
+    </div>
+  </section>
+
+  <section class="steps" id="empty" aria-label="How it works">
+    <div class="card step"><span class="n">1</span><h3>See</h3><p>OpenCV 5 compares each frame to the empty-cell reference, finds people, and tracks them across frames.</p></div>
+    <div class="card step"><span class="n">2</span><h3>Verify</h3><p>An intrusion only counts after 1.5 s inside the zone, and a worker is re-inspected up close before any stop.</p></div>
+    <div class="card step"><span class="n">3</span><h3>Act</h3><p>Evidence is stored, alerts go out, and a supervisor approves or stops each borderline entry.</p></div>
+  </section>
+
+  <div id="notice" hidden></div>
+
+  <section class="outcome" id="outcome" hidden aria-live="polite"></section>
+
+  <section class="workspace" id="workspace" hidden>
+    <div class="card player">
+      <div class="stage"><img id="frameImg" alt="Annotated camera frame"><span class="ts" id="frameTs">0.00 s</span></div>
+      <div class="bar">
+        <button class="icon-btn" id="btnPlay" aria-label="Play clip" title="Play / pause (space)">
+          <svg id="icoPlay" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+          <svg id="icoPause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" hidden><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+        </button>
+        <div class="scrub"><input type="range" id="scrub" min="0" max="23" value="0" aria-label="Clip position"><div class="marks" id="marks"></div></div>
+        <span class="clock" id="clock">0.00 / 0.00 s</span>
+        <button class="icon-btn" id="btnPanel" aria-label="Hide side panel" title="Hide or show the side panel">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>
+        </button>
+      </div>
+      <div class="summary"><h4>Shift summary</h4><div class="prose" id="summary"></div></div>
+    </div>
+
+    <div class="card side">
+      <div class="side-head">
+        <div class="tabs" role="tablist" aria-label="Results">
+          <button class="tab" role="tab" id="tab-decisions" aria-controls="panel-decisions" aria-selected="true">Decisions<span class="count" id="cDecisions">0</span></button>
+          <button class="tab" role="tab" id="tab-trace" aria-controls="panel-trace" aria-selected="false" tabindex="-1">Agent steps<span class="count" id="cTrace">0</span></button>
+          <button class="tab" role="tab" id="tab-check" aria-controls="panel-check" aria-selected="false" tabindex="-1">Scenario check</button>
+        </div>
+      </div>
+      <div class="panel" role="tabpanel" id="panel-decisions" aria-labelledby="tab-decisions"></div>
+      <div class="panel" role="tabpanel" id="panel-trace" aria-labelledby="tab-trace" hidden></div>
+      <div class="panel" role="tabpanel" id="panel-check" aria-labelledby="tab-check" hidden></div>
+    </div>
+  </section>
+
+  <details class="card section">
+    <summary><span class="chev">▶</span> How EdgeSentry runs on AWS <span class="faint">architecture</span></summary>
+    <div class="section-body">
+      <div class="arch">
+        <div class="box"><b>Perceive · OpenCV 5</b>Clean-plate differencing, Otsu threshold, morphology, connected components, centroid tracking, zone polygon test.</div>
+        <div class="box"><b>Decide · Amazon Bedrock</b>A tool-using safety agent reads the scene report, re-inspects PPE up close, and chooses an action. Code guardrails veto unsafe or unproven actions; a fixed policy takes over if the model is unavailable.</div>
+        <div class="box"><b>Act · S3 + SNS</b>Every action stores an evidence frame in a private, encrypted S3 bucket. Stops and approval requests are published to an SNS alert topic.</div>
+        <div class="box"><b>Operate · Lambda + CloudWatch</b>One Lambda behind a Function URL. Per-run metrics (latency, steps, guardrail blocks, accuracy) via CloudWatch; X-Ray tracing; a DynamoDB daily cap protects the public demo.</div>
+      </div>
+    </div>
+  </details>
+
+  <details class="card section" id="runDetails" hidden>
+    <summary><span class="chev">▶</span> Run details <span class="faint">timings, identifiers, raw response</span></summary>
+    <div class="section-body">
+      <dl class="kv" id="runKv"></dl>
+      <button class="btn" id="btnDownload">Download raw response (JSON)</button>
+    </div>
+  </details>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (s) { return document.querySelector(s); };
+  var ACTION = {
+    trigger_estop_alert: { cls: 'stop', label: 'Protective stop' },
+    request_supervisor_approval: { cls: 'approve', label: 'Supervisor approval' },
+    log_and_monitor: { cls: 'log', label: 'Logged — monitoring' }
+  };
+  var state = { mode: 'bedrock', data: null, frame: 0, timer: null, imgs: [], decided: {} };
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function pct(x) { return Math.round((x || 0) * 100) + '%'; }
+  function secs(x) { return (x || 0).toFixed(2) + ' s'; }
+
+  // Minimal, safe Markdown → HTML (escape first, then a few inline/blocks).
+  function md(text) {
+    var lines = esc(text || '').split(/\r?\n/), out = [], list = null, para = [];
+    function inline(s) {
+      return s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/`([^`]+)`/g, '<code>$1</code>');
+    }
+    function flushPara() { if (para.length) { out.push('<p>' + inline(para.join(' ')) + '</p>'); para = []; } }
+    function flushList() { if (list) { out.push('</' + list + '>'); list = null; } }
+    lines.forEach(function (raw) {
+      var line = raw.trim(), m;
+      if (!line) { flushPara(); flushList(); return; }
+      if ((m = line.match(/^#{1,6}\s+(.*)$/))) { flushPara(); flushList(); out.push('<p><strong>' + inline(m[1]) + '</strong></p>'); return; }
+      if ((m = line.match(/^(?:[-*•]|\d+[.)])\s+(.*)$/))) {
+        flushPara();
+        var kind = /^\d/.test(line) ? 'ol' : 'ul';
+        if (list !== kind) { flushList(); out.push('<' + kind + '>'); list = kind; }
+        out.push('<li>' + inline(m[1]) + '</li>'); return;
+      }
+      flushList(); para.push(line);
+    });
+    flushPara(); flushList();
+    return out.join('');
+  }
+
+  function jsonHtml(obj) {
+    return esc(JSON.stringify(obj, null, 2)).replace(
+      /(&quot;(?:\\.|[^&]|&(?!quot;))*?&quot;)(\s*:)?|\b(true|false|null)\b|(-?\d+(?:\.\d+)?(?:e[+-]?\d+)?)/g,
+      function (m, str, colon, lit, num) {
+        if (str) return colon ? '<span class="j-k">' + str + '</span>' + colon : '<span class="j-s">' + str + '</span>';
+        if (lit) return '<span class="j-b">' + lit + '</span>';
+        return '<span class="j-n">' + num + '</span>';
+      });
+  }
+
+  /* ---------- theme ---------- */
+  $('#btnTheme').addEventListener('click', function () {
+    var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('theme', next); } catch (e) {}
+  });
+
+  /* ---------- status ---------- */
+  fetch('api/health').then(function (r) { return r.json(); }).then(function (h) {
+    var aws = h.configured && h.configured.evidence_bucket && h.configured.alert_topic;
+    $('#statusDot').className = 'dot' + (h.status === 'ok' ? ' on' : '');
+    $('#statusText').textContent = aws ? 'Live on AWS' : 'Online · offline actions';
+    $('#status').title = aws ? 'Actions are delivered to S3 and SNS in ' + (h.region || 'AWS') : 'Running without AWS: actions are recorded locally';
+  }).catch(function () { $('#statusText').textContent = 'Unreachable'; });
+
+  /* ---------- mode ---------- */
+  var segBtns = document.querySelectorAll('.seg button');
+  segBtns.forEach(function (b) {
+    b.addEventListener('click', function () {
+      state.mode = b.dataset.mode;
+      segBtns.forEach(function (o) { o.setAttribute('aria-checked', String(o === b)); });
+      $('#runHint').textContent = state.mode === 'bedrock'
+        ? 'Analyzes a 6-second, 24-frame clip. The AI agent takes several seconds to decide.'
+        : 'Analyzes a 6-second, 24-frame clip with fixed safety rules.';
+    });
+  });
+
+  /* ---------- run ---------- */
+  $('#btnRun').addEventListener('click', run);
+  function run() {
+    var btn = $('#btnRun'), started = Date.now(), tick;
+    btn.disabled = true;
+    btn.insertAdjacentHTML('afterbegin', '<span class="spinner" aria-hidden="true"></span>');
+    var lbl = $('#runLabel');
+    function update() { lbl.textContent = 'Analyzing the clip… ' + Math.floor((Date.now() - started) / 1000) + ' s'; }
+    update(); tick = setInterval(update, 500);
+    showNotice(null);
+    fetch('api/run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode: state.mode }) })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j; }); })
+      .then(render)
+      .catch(function (e) { showNotice('The safety check could not run: ' + e.message, true); })
+      .finally(function () {
+        clearInterval(tick); btn.disabled = false;
+        var sp = btn.querySelector('.spinner'); if (sp) sp.remove();
+        lbl.textContent = state.data ? 'Run again' : 'Run safety check';
+      });
+  }
+
+  function showNotice(text, isErr) {
+    var n = $('#notice');
+    if (!text) { n.hidden = true; n.innerHTML = ''; return; }
+    n.hidden = false; n.className = 'notice' + (isErr ? ' err' : ''); n.innerHTML = text;
+  }
+
+  /* ---------- render ---------- */
+  function render(d) {
+    state.data = d; state.decided = {};
+    $('#empty').hidden = true;
+    $('.hero').classList.add('compact');
+    $('#workspace').hidden = false;
+    $('#runDetails').hidden = false;
+    stop();
+
+    if (d.fallback_reason) {
+      showNotice('<strong>The fixed safety policy made these decisions.</strong> ' +
+        esc(d.fallback_notice || 'The AI agent did not complete this run.') + ' EdgeSentry used its deterministic rules instead.');
+    }
+
+    var counts = { trigger_estop_alert: 0, request_supervisor_approval: 0, log_and_monitor: 0 };
+    d.decisions.forEach(function (x) { counts[x.action] = (counts[x.action] || 0) + 1; });
+    var ev = d.evaluation, n = ev.rows.length, ok = ev.rows.filter(function (r) { return r.correct; }).length;
+    var who = d.decision_mode === 'bedrock' ? 'AI safety agent' : 'Fixed safety policy';
+    $('#outcome').hidden = false;
+    $('#outcome').innerHTML =
+      tile('stop', counts.trigger_estop_alert, counts.trigger_estop_alert === 1 ? 'Protective stop' : 'Protective stops') +
+      tile('approve', counts.request_supervisor_approval, 'Need a supervisor') +
+      tile('log', counts.log_and_monitor, 'Logged, still monitoring') +
+      '<div class="tile check' + (ok === n ? ' good' : '') + '"><div class="num">' + ok + ' / ' + n + ' correct</div>' +
+      '<div class="lbl">against the scenario’s known answers · decided by ' + esc(who) + '</div></div>';
+
+    // Frames
+    state.imgs = d.frames.map(function (b64) { var i = new Image(); i.src = 'data:image/jpeg;base64,' + b64; return i; });
+    var scrub = $('#scrub'); scrub.max = d.frames.length - 1;
+    var perFrame = {}, maxStack = 1;
+    $('#marks').innerHTML = d.decisions.map(function (x) {
+      var left = d.frames.length > 1 ? (x.evidence_frame / (d.frames.length - 1)) * 100 : 0;
+      var a = ACTION[x.action] || ACTION.log_and_monitor;
+      var row = perFrame[x.evidence_frame] = (perFrame[x.evidence_frame] || 0) + 1;  // stack marks that share a frame
+      maxStack = Math.max(maxStack, row);
+      return '<button class="mark ' + a.cls + '" style="left:' + left + '%;top:' + (row - 1) * 14 + 'px" data-frame="' + x.evidence_frame + '" data-track="' +
+        esc(x.track_id) + '" title="' + esc(x.track_id + ': ' + a.label) + '" aria-label="Jump to ' + esc(x.track_id) + '"></button>';
+    }).join('');
+    $('.scrub').style.setProperty('--marks-h', (maxStack * 14) + 'px');
+    showFrame(d.decisions.length ? d.decisions[0].evidence_frame : 0);
+    $('#summary').innerHTML = md(d.summary) || '<p class="muted">No summary.</p>';
+
+    renderDecisions(d);
+    renderTrace(d);
+    renderCheck(d);
+    renderRunDetails(d);
+    selectTab('decisions');
+  }
+
+  function tile(cls, num, lbl) {
+    return '<div class="tile ' + cls + '"><div class="num">' + num + '</div><div class="lbl">' + esc(lbl) + '</div></div>';
+  }
+
+  function decisionFacts(x) {
+    var e = x.evidence, i = x.inspection, rows = [];
+    rows.push(['In the zone', e.persistence_verified
+      ? secs(e.time_in_zone_s) + ' · confirmed at ' + secs(e.verified_at_s)
+      : secs(e.time_in_zone_s) + ' · brief, under the 1.5 s threshold']);
+    rows.push(['Vest (wide)', ({ compliant: 'present', missing: 'not seen', uncertain: 'unclear' })[e.coarse_ppe_status] + ' · ' + pct(e.coarse_vest_ratio) + ' hi-vis']);
+    if (i) rows.push(['Close-up', i.vest_present ? 'vest found · ' + pct(i.vest_coverage) + ' of torso' : 'no vest · ' + pct(i.vest_coverage) + ' of torso']);
+    rows.push(['Hard hat', e.hardhat_detected ? 'yes' : 'not seen']);
+    if (e.shape && e.shape !== 'upright person') rows.push(['Shape', 'not an upright person · treated as one (fail-safe)']);
+    return '<ul class="facts">' + rows.map(function (r) { return '<li><span class="k">' + esc(r[0]) + '</span><span>' + esc(r[1]) + '</span></li>'; }).join('') + '</ul>';
+  }
+
+  function deliveryLine(x) {
+    var dl = x.delivery;
+    if (!dl) return '';
+    if (dl.delivery === 'failed') return '<div class="delivery"><span class="bad">Delivery failed</span> ' + esc(dl.error || '') + '</div>';
+    if (dl.delivery === 'aws') {
+      var bits = [];
+      if (dl.sns_message_id) bits.push('<span class="ok">✓ Alert sent</span>');
+      if (dl.s3_key) bits.push('<span class="ok">✓ Evidence stored</span>' + (dl.evidence_url ? ' <a href="' + esc(dl.evidence_url) + '" target="_blank" rel="noopener noreferrer">open</a>' : ''));
+      return '<div class="delivery">' + bits.join('') + '</div>';
+    }
+    return '<div class="delivery">Recorded locally (offline demo — nothing was sent)</div>';
+  }
+
+  function renderDecisions(d) {
+    $('#cDecisions').textContent = d.decisions.length;
+    var html = d.decisions.map(function (x) {
+      var a = ACTION[x.action] || ACTION.log_and_monitor, e = x.evidence, i = x.inspection;
+      var changed = i && i.vest_present && e.coarse_ppe_status !== 'compliant';
+      var callout = changed
+        ? '<div class="callout">The close-up changed the outcome: the wide view missed a vest in shadow, so this is a supervisor call, not a stop.</div>'
+        : (x.action === 'trigger_estop_alert' && i && !i.vest_present
+          ? '<div class="callout">Stopped only after the close-up confirmed no vest, on an intrusion that persisted past 1.5 s.</div>' : '');
+      var human = x.action === 'request_supervisor_approval'
+        ? '<div class="human" data-track="' + esc(x.track_id) + '"><button class="btn" data-decide="approve">Approve entry</button>' +
+          '<button class="btn danger" data-decide="stop">Stop the robot</button><span class="faint" data-result></span></div>' : '';
+      var reason = x.reason ? '<details class="reason"><summary>Why this action</summary><p>' + esc(x.reason) + '</p></details>' : '';
+      return '<article class="dec ' + a.cls + '" id="dec-' + esc(x.track_id) + '">' +
+        '<div class="dec-head"><span class="tid">' + esc(x.track_id) + '</span><span class="pill ' + a.cls + '">' + esc(x.action_label || a.label) + '</span></div>' +
+        '<div class="dec-body"><button class="thumb" data-frame="' + x.evidence_frame + '" title="Show this moment in the clip" aria-label="Show ' + esc(x.track_id) + ' in the clip">' +
+        (x.evidence_image ? '<img alt="Evidence frame for ' + esc(x.track_id) + '" src="data:image/jpeg;base64,' + x.evidence_image + '">' : '') + '</button>' +
+        decisionFacts(x) + '</div>' + callout + reason + deliveryLine(x) + human + '</article>';
+    }).join('');
+    $('#panel-decisions').innerHTML = html || '<p class="muted">Nobody entered the zone.</p>';
+  }
+
+  function stepView(s) {
+    var o = s.output || {}, inp = s.input || {}, t = inp.track_id || o.track_id || '';
+    if (s.tool === 'controller') return { cls: 'nudge', title: 'Controller reminder', out: 'Asked the agent to resolve ' + esc((inp.unresolved || []).join(', ')) };
+    if (o.status === 'blocked_by_guardrail') {
+      return { cls: 'blocked', title: 'Blocked: ' + (ACTION[s.tool] ? ACTION[s.tool].label : s.tool) + ' for ' + t, out: 'Guardrail: ' + esc(o.reason) };
+    }
+    switch (s.tool) {
+      case 'get_scene_report':
+        var inZone = (o.zone_tracks_to_resolve || []).length;
+        return { cls: 'perceive', title: 'Read the OpenCV 5 scene report', out: (o.tracks || []).length + ' people tracked · ' + inZone + ' entered the zone' };
+      case 'inspect_worker':
+        return { cls: 'perceive', title: 'Re-inspected ' + t + ' up close',
+          out: o.error ? esc(o.error) : (o.vest_present ? 'Vest found · ' + pct(o.vest_coverage) + ' of torso' : 'No vest · ' + pct(o.vest_coverage) + ' of torso') };
+      case 'trigger_estop_alert': return { cls: 'stop', title: 'Protective stop for ' + t, out: o.error ? esc(o.error) : 'Executed' };
+      case 'request_supervisor_approval': return { cls: 'approve', title: 'Asked a supervisor about ' + t, out: o.error ? esc(o.error) : 'Executed' };
+      case 'log_and_monitor': return { cls: 'log', title: 'Logged ' + t + ', kept monitoring', out: o.error ? esc(o.error) : 'Executed' };
+      default: return { cls: '', title: s.tool, out: '' };
+    }
+  }
+
+  function renderTrace(d) {
+    $('#cTrace').textContent = d.trace.length;
+    var blocks = d.guardrail_blocks.length;
+    var head = '<p class="faint" style="margin:0 0 12px">' + (d.decision_mode === 'bedrock'
+      ? 'Each step is a tool the AI agent chose. OpenCV results shape what it does next; code guardrails can veto any action.'
+      : 'Steps taken by the fixed safety policy, using the same tools and guardrails as the AI agent.') +
+      (blocks ? ' <strong>' + blocks + ' action' + (blocks > 1 ? 's were' : ' was') + ' blocked.</strong>' : '') + '</p>';
+    var items = d.trace.map(function (s) {
+      var v = stepView(s);
+      return '<li class="' + v.cls + '"><span class="num">' + s.step + '</span><div class="t">' + esc(v.title) + '</div>' +
+        (s.why ? '<div class="why">' + esc(s.why) + '</div>' : '') + '<div class="out">' + v.out + '</div>' +
+        '<details class="raw"><summary>Raw tool call</summary><pre class="json">' + jsonHtml({ tool: s.tool, input: s.input, output: s.output }) + '</pre></details></li>';
+    }).join('');
+    var notes = d.agent_notes ? '<details class="raw"><summary>Agent’s own closing note (narrative, not verified)</summary>' +
+      '<div class="prose" style="margin-top:6px;font-size:14px">' + md(d.agent_notes) + '</div></details>' : '';
+    $('#panel-trace').innerHTML = head + '<ol class="trace">' + items + '</ol>' + notes;
+  }
+
+  function renderCheck(d) {
+    var ev = d.evaluation;
+    var lbl = function (a) { return a ? (ACTION[a] ? ACTION[a].label : a) : 'No action'; };
+    var rows = ev.rows.map(function (r) {
+      return '<tr><td><strong>' + esc(r.label) + '</strong><div class="faint">' + esc(r.worker) + (r.tracks.length ? ' · track ' + esc(r.tracks.join(', ')) : ' · not tracked') + '</div></td>' +
+        '<td>' + esc(lbl(r.expected)) + '</td><td>' + esc(lbl(r.got)) + '</td><td class="' + (r.correct ? 'yes' : 'no') + '">' + (r.correct ? '✓' : '✗') + '</td></tr>';
+    }).join('');
+    $('#panel-check').innerHTML =
+      '<p class="faint" style="margin:0 0 10px">This clip is generated, so the right action for every worker is known in advance. Each decision is checked against it.</p>' +
+      '<table><thead><tr><th>Worker</th><th>Expected</th><th>Decided</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>' +
+      '<p style="margin:12px 0 0;font-size:14px">Unneeded stops: <strong>' + ev.false_estops + '</strong> · Missed stops: <strong>' + ev.missed_estops + '</strong></p>';
+  }
+
+  function renderRunDetails(d) {
+    var t = d.timings || {};
+    var kv = [
+      ['Run', d.run_id], ['Decided by', d.decision_mode === 'bedrock' ? 'AI safety agent (Amazon Bedrock)' : 'Fixed safety policy'],
+      ['Actions delivered', d.live && d.live.aws_actions ? 'AWS (S3 evidence, SNS alerts)' + (d.live.region ? ' · ' + d.live.region : '') : 'Recorded locally'],
+      ['Clip', d.clip.frames + ' frames · ' + d.clip.seconds + ' s · ' + d.clip.fps_sampled + ' fps sampled'],
+      ['Perception', t.perception_ms + ' ms (' + t.perception_fps + ' frames/s)'],
+      ['Camera', d.camera ? 'drift corrected up to ' + d.camera.max_drift_corrected_px + ' px · lighting offset ' + d.camera.max_lighting_offset : '—'], ['Decisions', t.agent_ms + ' ms · ' + d.trace.length + ' steps'],
+      ['Total', t.total_ms + ' ms']
+    ];
+    if (d.fallback_reason) kv.push(['Fallback', d.fallback_reason]);
+    $('#runKv').innerHTML = kv.map(function (r) { return '<dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd>'; }).join('');
+  }
+
+  $('#btnDownload').addEventListener('click', function () {
+    if (!state.data) return;
+    var copy = Object.assign({}, state.data, { frames: '[' + state.data.frames.length + ' JPEG frames omitted]' });
+    copy.decisions = copy.decisions.map(function (x) { return Object.assign({}, x, { evidence_image: '[omitted]' }); });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(copy, null, 2)], { type: 'application/json' }));
+    a.download = 'edgesentry-' + state.data.run_id + '.json';
+    a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+  });
+
+  /* ---------- human approval ---------- */
+  $('#panel-decisions').addEventListener('click', function (ev) {
+    var thumb = ev.target.closest('.thumb');
+    if (thumb) { stop(); showFrame(+thumb.dataset.frame); return; }
+    var b = ev.target.closest('[data-decide]');
+    if (!b) return;
+    var box = b.closest('.human'), track = box.dataset.track, res = box.querySelector('[data-result]');
+    box.querySelectorAll('button').forEach(function (x) { x.disabled = true; });
+    res.textContent = 'Recording…';
+    fetch('api/decision', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ run_id: state.data.run_id, track_id: track, decision: b.dataset.decide }) })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j; }); })
+      .then(function (j) {
+        state.decided[track] = j.decision;
+        box.innerHTML = '<span class="pill ' + (j.decision === 'stop' ? 'stop' : 'ok') + '">' + esc(j.label) + '</span>' +
+          '<span class="faint">' + (j.status === 'recorded' ? 'Recorded in S3 and announced on the alert topic' : 'Recorded locally (offline demo)') + '</span>';
+      })
+      .catch(function (e) {
+        res.textContent = e.message;
+        box.querySelectorAll('button').forEach(function (x) { x.disabled = false; });
+      });
+  });
+
+  /* ---------- player ---------- */
+  function showFrame(i) {
+    var d = state.data; if (!d) return;
+    i = Math.max(0, Math.min(d.frames.length - 1, i | 0));
+    state.frame = i;
+    $('#frameImg').src = state.imgs[i].src;
+    $('#scrub').value = i;
+    $('#frameTs').textContent = secs(d.timestamps[i]);
+    $('#clock').textContent = d.timestamps[i].toFixed(2) + ' / ' + d.timestamps[d.timestamps.length - 1].toFixed(2) + ' s';
+    document.querySelectorAll('.dec').forEach(function (el) { el.classList.remove('focus'); });
+    d.decisions.forEach(function (x) { if (x.evidence_frame === i) { var el = document.getElementById('dec-' + x.track_id); if (el) el.classList.add('focus'); } });
+  }
+  function play() {
+    if (!state.data || state.timer) return;
+    if (state.frame >= state.data.frames.length - 1) showFrame(0);
+    state.timer = setInterval(function () {
+      if (state.frame >= state.data.frames.length - 1) { stop(); return; }
+      showFrame(state.frame + 1);
+    }, 1000 / (state.data.clip.fps_sampled || 4));
+    $('#icoPlay').hidden = true; $('#icoPause').hidden = false; $('#btnPlay').setAttribute('aria-label', 'Pause clip');
+  }
+  function stop() {
+    if (state.timer) { clearInterval(state.timer); state.timer = null; }
+    $('#icoPlay').hidden = false; $('#icoPause').hidden = true; $('#btnPlay').setAttribute('aria-label', 'Play clip');
+  }
+  $('#btnPlay').addEventListener('click', function () { state.timer ? stop() : play(); });
+  $('#scrub').addEventListener('input', function (e) { stop(); showFrame(+e.target.value); });
+  $('#marks').addEventListener('click', function (e) {
+    var m = e.target.closest('.mark'); if (!m) return;
+    stop(); showFrame(+m.dataset.frame); selectTab('decisions');
+    var el = document.getElementById('dec-' + m.dataset.track); if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  });
+  document.addEventListener('keydown', function (e) {
+    if (!state.data || e.target.closest('input, textarea, button, summary')) return;
+    if (e.key === ' ') { e.preventDefault(); state.timer ? stop() : play(); }
+    if (e.key === 'ArrowRight') { stop(); showFrame(state.frame + 1); }
+    if (e.key === 'ArrowLeft') { stop(); showFrame(state.frame - 1); }
+  });
+  $('#btnPanel').addEventListener('click', function () {
+    var ws = $('#workspace'), wide = ws.classList.toggle('wide');
+    this.setAttribute('aria-label', wide ? 'Show side panel' : 'Hide side panel');
+  });
+
+  /* ---------- tabs ---------- */
+  var tabs = ['decisions', 'trace', 'check'];
+  function selectTab(name) {
+    tabs.forEach(function (t) {
+      var on = t === name, tab = document.getElementById('tab-' + t);
+      tab.setAttribute('aria-selected', String(on)); tab.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t).hidden = !on;
+    });
+  }
+  tabs.forEach(function (t, idx) {
+    var tab = document.getElementById('tab-' + t);
+    tab.addEventListener('click', function () { selectTab(t); });
+    tab.addEventListener('keydown', function (e) {
+      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+      var next = tabs[(idx + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+      selectTab(next); document.getElementById('tab-' + next).focus();
+    });
+  });
+})();
+</script>
+</body>
+</html>

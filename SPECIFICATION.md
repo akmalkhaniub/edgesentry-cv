@@ -1,65 +1,55 @@
-# Technical Specification: EdgeSentry
-**Project Name:** EdgeSentry (OpenCV AI Competition powered by AWS)  
-**Status:** Rebuilt in Python + OpenCV (updated 2026-09-18)  
+# EdgeSentry: specification (v2.0.0)
 
-> **Implementation status (2026-09-18):** Rebuilt from the Node prototype (now under `legacy-js/`) into a Python + OpenCV package (`edgesentry/`). Real OpenCV throughout: `cv2.pointPolygonTest` zone intrusion, HSV hi-vis PPE detection, a `cv2.dnn` ONNX detector (HOG where available), `cv2.VideoCapture` streaming with `cv2.polylines`/`putText` annotation, a persistence temporal filter, and boto3 SNS/S3 dispatch with a simulator fallback. 8 pytest cases pass on synthetic frames (no camera/model needed). Not yet run in production: a real RTSP/camera feed, a trained ONNX PPE model, edge hardware/IoT certs, and deployed AWS infra (SAM/CDK, Lambda, DynamoDB).
-**Version:** 1.0.0  
+What the deployed system does, as built. For design rationale and results, see
+[docs/TECHNICAL_REPORT.md](docs/TECHNICAL_REPORT.md).
 
----
+## HTTP API (Lambda Function URL)
 
-## 1. System Topology
-EdgeSentry splits processing between localized edge nodes (real-time OpenCV frame analysis, object tracking, and optical flow) and an AWS serverless cloud backend for event auditing, push notifications, and model retraining triggers.
+| Method and path | Body | Response |
+|---|---|---|
+| `GET /` | — | The web app (HTML) |
+| `GET /api/health` | — | `{status, opencv, configured: {evidence_bucket, alert_topic, usage_limits, bedrock_enabled}, region}` |
+| `POST /api/run` | `{"mode": "bedrock" \| "rules"}` | A safety-check result (below). `429` once the daily run cap is reached |
+| `POST /api/decision` | `{"run_id", "track_id", "decision": "approve" \| "stop"}` | `200` recorded · `404` no such approval request · `409` already answered · `400` invalid |
 
-```mermaid
-graph TD
-    A[Camera Feed / RTSP Stream] --> B[Edge Device: OpenCV Pipeline]
-    B --> C[Spatial Zone & PPE Detection Model]
-    C -->|Violation Triggered| D[Event Deduplication & Frame Crop]
-    D -->|MQTT / HTTPS via AWS IoT Greengrass| E[AWS API Gateway / IoT Core]
-    E --> F[AWS Lambda Serverless Event Processor]
-    F --> G[Amazon DynamoDB: Event Log]
-    F --> H[Amazon S3: Encrypted Violation Snapshot]
-    F --> I[Amazon SNS / SES: Emergency Mobile Notification]
-    G --> J[Next.js Incident Operations Dashboard]
-```
+Bodies over 4 KB are rejected (`413`). Errors never include stack traces; those go to
+CloudWatch Logs. Responses carry `nosniff`, `no-referrer`, `DENY` framing and `no-store` headers.
 
----
+## Safety-check result (`POST /api/run`)
 
-## 2. OpenCV Vision Pipeline Specification
+| Field | Meaning |
+|---|---|
+| `run_id` | `YYYYMMDD-HHMMSS-xxxxxx` |
+| `decision_mode`, `requested_mode` | Who decided (`bedrock` or `rules`) and what was asked for |
+| `fallback_reason`, `fallback_notice` | Why the fixed policy decided instead of the agent, for logs and for people |
+| `summary` | Markdown, one line per decision, generated from executed actions and measured evidence |
+| `agent_notes` | The model's own closing note (not verified; AI mode only) |
+| `decisions[]` | `track_id`, `action`, `action_label`, `reason`, `evidence` (time in zone, verified, coarse PPE, hard hat, shape), `inspection` (close-up result), `delivery` (S3 key, presigned URL, SNS message id), `evidence_image` (JPEG, base64), `evidence_frame`, `ground_truth` |
+| `trace[]` | Every step: `tool`, `input`, `why`, `output` (includes guardrail blocks and controller nudges) |
+| `guardrail_blocks[]` | Blocked actions with reasons |
+| `evaluation` | Accuracy, false and missed stops, and per-worker rows against the scenario ground truth |
+| `camera` | Drift corrected (px), lighting offset, max foreground fraction |
+| `timings` | `render_ms`, `perception_ms`, `perception_fps`, `agent_ms`, `total_ms` |
+| `frames[]`, `timestamps[]` | The annotated clip (JPEG, base64, 640 px wide) |
 
-### 2.1 Pre-processing & Region of Interest (ROI)
-- Dynamic perspective transform to project 2D camera coordinates into ground-plane metric coordinates.
-- User-defined polygonal restricted zones using `cv2.pointPolygonTest`.
+## Actions and guardrails
 
-### 2.2 Inference & Object Tracking
-- Run quantized INT8 YOLOv8/YOLOv11 model through OpenCV DNN module (`cv2.dnn.readNetFromONNX`).
-- Multi-target tracking using ByteTrack / OpenCV SORT algorithm to maintain object IDs across camera occlusions.
+| Action | Allowed only when | Delivery |
+|---|---|---|
+| `trigger_estop_alert` | intrusion persistence-verified (1.5 s) **and** `inspect_worker` ran **and** found no vest | S3 evidence + SNS |
+| `request_supervisor_approval` | intrusion persistence-verified | S3 evidence + SNS |
+| `log_and_monitor` | intrusion **not** verified | S3 evidence |
 
-### 2.3 Edge Alert Filtering
-- Temporal filtering: Alert triggers only if an unauthorized person remains in a danger zone for `> 1.5s` to avoid false-positive transient detections.
+Every track that entered the zone must be resolved exactly once.
 
----
+## Storage
 
-## 3. Serverless Backend Schema
+* `s3://<evidence-bucket>/evidence/<run_id>/<track>-<action>.jpg`: expires after 30 days.
+* `s3://<evidence-bucket>/decisions/<run_id>/<track>.json`: supervisor answers, written
+  with `IfNoneMatch="*"`; expires after 90 days.
+* DynamoDB `pk = "<runs|bedrock>#YYYY-MM-DD"`, `runs` (counter), `expires_at` (TTL).
 
-### 3.1 Violation Event Schema (DynamoDB)
-```json
-{
-  "eventId": "evt_20261027_00412",
-  "timestamp": 1793081234,
-  "cameraId": "cam_floor_b_zone3",
-  "violationType": "ZONE_INTRUSION_NO_HARDHAT",
-  "confidenceScore": 0.942,
-  "snapshotS3Uri": "s3://edgesentry-vault-2026/snapshots/evt_00412.jpg",
-  "zoneCoordinates": [[120, 340], [450, 340], [400, 600], [100, 580]],
-  "resolved": false
-}
-```
+## Metrics (CloudWatch EMF, namespace `EdgeSentry`)
 
----
-
-## 4. Acceptance Criteria
-1. OpenCV edge pipeline operates at `> 20 FPS` on simulated or local hardware.
-2. Accurate detection of both person and safety equipment violation in polygon test zone.
-3. Successful edge-to-cloud dispatch to AWS IoT Core / Lambda with snapshot uploaded to S3.
-4. Real-time alert rendering on the Web Operations console within 2 seconds of physical event.
+Dimensions `Service=SafetyCheck`, `DecisionMode`. Metrics: `PerceptionMs`, `AgentMs`,
+`AgentSteps`, `GuardrailBlocks`, `EStopAlerts`, `DecisionAccuracy`, `FallbackToPolicy`.

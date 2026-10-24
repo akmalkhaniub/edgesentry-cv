@@ -11,3 +11,6 @@ dist/
 
 .coverage
 htmlcov/
+.claude/
+.build/
+.video/

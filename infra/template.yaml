@@ -1,0 +1,338 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  EdgeSentry - OpenCV 5 robot-cell safety agent on AWS Lambda (Function URL), with
+  Amazon Bedrock decisions, S3 evidence, SNS alerts, a DynamoDB usage cap, and
+  CloudWatch metrics/alarms/dashboard. Deploy with infra/deploy.sh.
+
+Parameters:
+  CodeBucket:
+    Type: String
+    Description: S3 bucket holding the Lambda deployment package (created by deploy.sh).
+  CodeKey:
+    Type: String
+    Description: S3 key of the Lambda deployment package.
+  AlertEmail:
+    Type: String
+    Default: ""
+    Description: Optional email address subscribed to safety alerts (confirm the subscription email).
+  BedrockModelId:
+    Type: String
+    Default: us.amazon.nova-pro-v1:0
+    AllowedPattern: "^us\\.amazon\\.nova-[a-z0-9.:-]+$"
+    Description: Bedrock cross-region inference profile used by the safety agent (Amazon Nova family).
+  BedrockDailyCap:
+    Type: Number
+    Default: 150
+    MinValue: 0
+    Description: AI-agent runs allowed per UTC day on the public endpoint (then the fixed policy decides).
+  DailyRunCap:
+    Type: Number
+    Default: 1000
+    MinValue: 1
+    Description: Total safety checks allowed per UTC day on the public endpoint.
+
+Conditions:
+  HasAlertEmail: !Not [!Equals [!Ref AlertEmail, ""]]
+
+Resources:
+  # ---------------------------------------------------------------- storage
+  EvidenceBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireEvidence
+            Status: Enabled
+            Prefix: evidence/
+            ExpirationInDays: 30
+          - Id: ExpireDecisions
+            Status: Enabled
+            Prefix: decisions/
+            ExpirationInDays: 90
+      Tags:
+        - Key: project
+          Value: edgesentry
+
+  EvidenceBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref EvidenceBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt EvidenceBucket.Arn
+              - !Sub "${EvidenceBucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+  UsageTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expires_at
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: project
+          Value: edgesentry
+
+  # ---------------------------------------------------------------- alerts
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: EdgeSentry safety alerts
+      KmsMasterKeyId: alias/aws/sns
+      Tags:
+        - Key: project
+          Value: edgesentry
+
+  AlertEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasAlertEmail
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+
+  # ---------------------------------------------------------------- compute
+  FunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-safety"
+      RetentionInDays: 14
+
+  FunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: EdgeSentry safety Lambda - least privilege
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: edgesentry-runtime
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: Logs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "${FunctionLogGroup.Arn}:*"
+              - Sid: Tracing
+                Effect: Allow
+                Action:
+                  - xray:PutTraceSegments
+                  - xray:PutTelemetryRecords
+                Resource: "*"
+              - Sid: Evidence
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                Resource:
+                  - !Sub "${EvidenceBucket.Arn}/evidence/*"
+                  - !Sub "${EvidenceBucket.Arn}/decisions/*"
+              - Sid: Alerts
+                Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref AlertTopic
+              - Sid: AlertTopicEncryption
+                Effect: Allow
+                Action:
+                  - kms:GenerateDataKey*
+                  - kms:Decrypt
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub "sns.${AWS::Region}.amazonaws.com"
+              - Sid: UsageCap
+                Effect: Allow
+                Action: dynamodb:UpdateItem
+                Resource: !GetAtt UsageTable.Arn
+              - Sid: SafetyAgentModel
+                Effect: Allow
+                Action: bedrock:InvokeModel
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.amazon.nova-*"
+                  - !Sub "arn:${AWS::Partition}:bedrock:*::foundation-model/amazon.nova-*"
+
+  SafetyFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: FunctionLogGroup
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-safety"
+      Description: EdgeSentry - OpenCV 5 perception + safety agent + web UI
+      Runtime: python3.12
+      Architectures: [x86_64]
+      Handler: lambda_function.handler
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: !Ref CodeKey
+      Role: !GetAtt FunctionRole.Arn
+      MemorySize: 2048
+      Timeout: 60
+      ReservedConcurrentExecutions: 4
+      TracingConfig:
+        Mode: Active
+      LoggingConfig:
+        LogGroup: !Ref FunctionLogGroup
+        LogFormat: Text
+      Environment:
+        Variables:
+          EVIDENCE_BUCKET: !Ref EvidenceBucket
+          ALERT_TOPIC_ARN: !Ref AlertTopic
+          USAGE_TABLE: !Ref UsageTable
+          BEDROCK_MODEL_ID: !Ref BedrockModelId
+          BEDROCK_ENABLED: "true"
+          BEDROCK_DAILY_CAP: !Ref BedrockDailyCap
+          DAILY_RUN_CAP: !Ref DailyRunCap
+          OPENCV_LOG_LEVEL: ERROR
+      Tags:
+        - Key: project
+          Value: edgesentry
+
+  FunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt SafetyFunction.Arn
+      AuthType: NONE
+      InvokeMode: BUFFERED
+
+  FunctionUrlInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SafetyFunction
+      Action: lambda:InvokeFunctionUrl
+      Principal: "*"
+      FunctionUrlAuthType: NONE
+
+  FunctionUrlInvokeFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SafetyFunction
+      Action: lambda:InvokeFunction
+      Principal: "*"
+      InvokedViaFunctionUrl: true
+
+  # ---------------------------------------------------------------- operations
+  ErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: EdgeSentry Lambda errors (any in 5 minutes)
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref SafetyFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  AgentFallbackAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: The AI safety agent fell back to the fixed policy 3+ times in 15 minutes
+      Namespace: EdgeSentry
+      MetricName: FallbackToPolicy
+      Dimensions:
+        - Name: Service
+          Value: SafetyCheck
+        - Name: DecisionMode
+          Value: rules
+      Statistic: Sum
+      Period: 900
+      EvaluationPeriods: 1
+      Threshold: 3
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  Dashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub "${AWS::StackName}-safety"
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {"type": "metric", "x": 0, "y": 0, "width": 12, "height": 6, "properties": {
+              "title": "Latency per safety check (ms)", "region": "${AWS::Region}", "stat": "Average", "period": 300, "view": "timeSeries",
+              "metrics": [
+                ["EdgeSentry", "PerceptionMs", "Service", "SafetyCheck", "DecisionMode", "bedrock", {"label": "OpenCV perception (AI agent runs)"}],
+                ["EdgeSentry", "AgentMs", "Service", "SafetyCheck", "DecisionMode", "bedrock", {"label": "AI agent decisions"}],
+                ["EdgeSentry", "AgentMs", "Service", "SafetyCheck", "DecisionMode", "rules", {"label": "Fixed policy decisions"}]
+              ]}},
+            {"type": "metric", "x": 12, "y": 0, "width": 12, "height": 6, "properties": {
+              "title": "Safety outcomes", "region": "${AWS::Region}", "stat": "Sum", "period": 300, "view": "timeSeries",
+              "metrics": [
+                ["EdgeSentry", "EStopAlerts", "Service", "SafetyCheck", "DecisionMode", "bedrock"],
+                ["EdgeSentry", "GuardrailBlocks", "Service", "SafetyCheck", "DecisionMode", "bedrock"],
+                ["EdgeSentry", "FallbackToPolicy", "Service", "SafetyCheck", "DecisionMode", "rules"]
+              ]}},
+            {"type": "metric", "x": 0, "y": 6, "width": 12, "height": 6, "properties": {
+              "title": "Decision accuracy on the scenario (1.0 = all correct)", "region": "${AWS::Region}", "stat": "Minimum", "period": 300, "view": "timeSeries",
+              "yAxis": {"left": {"min": 0, "max": 1}},
+              "metrics": [
+                ["EdgeSentry", "DecisionAccuracy", "Service", "SafetyCheck", "DecisionMode", "bedrock", {"label": "AI agent"}],
+                ["EdgeSentry", "DecisionAccuracy", "Service", "SafetyCheck", "DecisionMode", "rules", {"label": "Fixed policy"}]
+              ]}},
+            {"type": "metric", "x": 12, "y": 6, "width": 12, "height": 6, "properties": {
+              "title": "Lambda health", "region": "${AWS::Region}", "period": 300, "view": "timeSeries",
+              "metrics": [
+                ["AWS/Lambda", "Invocations", "FunctionName", "${SafetyFunction}", {"stat": "Sum"}],
+                ["AWS/Lambda", "Errors", "FunctionName", "${SafetyFunction}", {"stat": "Sum"}],
+                ["AWS/Lambda", "Throttles", "FunctionName", "${SafetyFunction}", {"stat": "Sum"}],
+                ["AWS/Lambda", "Duration", "FunctionName", "${SafetyFunction}", {"stat": "p90", "yAxis": "right"}]
+              ]}}
+          ]
+        }
+
+Outputs:
+  AppUrl:
+    Description: Public web endpoint (UI + API)
+    Value: !GetAtt FunctionUrl.FunctionUrl
+  EvidenceBucketName:
+    Value: !Ref EvidenceBucket
+  AlertTopicArn:
+    Value: !Ref AlertTopic
+  FunctionName:
+    Value: !Ref SafetyFunction
+  DashboardUrl:
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=${AWS::StackName}-safety"

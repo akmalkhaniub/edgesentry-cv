@@ -1,19 +1,18 @@
-# EdgeSentry submission notes
+# Submission checklist: OpenCV AI Competition 2026
 
-Deadline 27 Oct 2026.
+Final deadline: **October 26, 2026, 11:59 PM PT**.
 
-## What a judge can watch and run
-
-Demo clip: `docs/edgesentry-demo.mp4` (8 seconds, 960x540). A scripted person walks into a restricted zone, loses the hi-vis vest, and the pipeline annotates the frame. Boxes are supplied to the pipeline so the clip does not depend on a trained model.
-
-```bash
-python scripts/write_demo_clip.py
-edgesentry --demo
-edgesentry --bench --frames 40
-```
-
-Bench on this machine, 2026-09-25: contour detector, 40 synthetic frames, **27.24 fps** (`docs/BENCH.json`).
-
-## Not in this submission
-
-No bundled ONNX weights, no webcam recording, and no live AWS SNS alert.
+| Requirement | Where |
+|---|---|
+| Uses OpenCV 5 substantively | `edgesentry/detector.py`, `edgesentry/agent.py`, `edgesentry/overlay.py`; see report §4 |
+| Meaningful component runs on AWS | Lambda (OpenCV 5 perception + agent), Bedrock, S3, SNS, DynamoDB, CloudWatch; `infra/template.yaml` |
+| Technical report (problem, users, architecture, OpenCV 5, AWS, evaluation, limitations, responsible use) | `docs/TECHNICAL_REPORT.md` |
+| Judge-accessible repository | https://github.com/akmalkhaniub/edgesentry-cv |
+| Pinned dependencies + build / deploy / test instructions | `requirements*.txt`, `pyproject.toml`, `README.md` → Run it |
+| Architecture diagram | `README.md`, report §3 (Mermaid; renders on GitHub) |
+| Working web endpoint | https://jzyv7mljhphuteckul2lxqe77u0xbqev.lambda-url.us-east-1.on.aws/ |
+| Video ≤ 5 minutes (team, app working, architecture, results) | `docs/demo/edgesentry_demo.mp4` → upload as public/unlisted |
+| Evaluation evidence including failure cases | `docs/EVALUATION.json`, `docs/LIVE_CHECK.json`, report §7 |
+| Agentic Vision Award: agent workflow diagram | `README.md`, report §5 |
+| Agentic Vision Award: trace where OpenCV output changes a later action | `docs/TRACE_EXAMPLE.json`, report §5 |
+| Agentic Vision Award: task success, failure handling, observability, human control | report §5, §7.3, §7.4 |

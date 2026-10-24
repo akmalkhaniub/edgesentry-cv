@@ -1,0 +1,267 @@
+{
+  "note": "Live Amazon Bedrock (Nova Pro, Converse API tool use) run on the baseline clip, recorded by EdgeSentry. Unedited except that tool outputs are shown as returned.",
+  "decided_by": "bedrock",
+  "steps": 10,
+  "latency_ms": 12672,
+  "decision_accuracy": 1.0,
+  "trace": [
+    {
+      "step": 1,
+      "tool": "get_scene_report",
+      "input": {},
+      "why": "I need to assess the new camera clip from the robot cell. The first step is to get a scene report to identify any tracks that have entered the zone.",
+      "output": {
+        "zone": "Robot Cell A",
+        "clip_seconds": 5.75,
+        "frames": 24,
+        "camera": {
+          "max_drift_corrected_px": 0.0,
+          "max_lighting_offset": 0.0,
+          "max_foreground_fraction": 0.0655
+        },
+        "tracks": [
+          {
+            "track_id": "T1",
+            "entered_zone": true,
+            "time_in_zone_s": 4.5,
+            "persistence_verified": true,
+            "verified_at_s": 2.75,
+            "coarse_vest_ratio": 0.894,
+            "coarse_ppe_status": "compliant",
+            "hardhat_detected": true,
+            "shape": "upright person"
+          },
+          {
+            "track_id": "T2",
+            "entered_zone": true,
+            "time_in_zone_s": 5.75,
+            "persistence_verified": true,
+            "verified_at_s": 1.5,
+            "coarse_vest_ratio": 0.0,
+            "coarse_ppe_status": "missing",
+            "hardhat_detected": false,
+            "shape": "upright person"
+          },
+          {
+            "track_id": "T3",
+            "entered_zone": true,
+            "time_in_zone_s": 0.25,
+            "persistence_verified": false,
+            "verified_at_s": null,
+            "coarse_vest_ratio": 0.895,
+            "coarse_ppe_status": "compliant",
+            "hardhat_detected": true,
+            "shape": "upright person"
+          },
+          {
+            "track_id": "T4",
+            "entered_zone": true,
+            "time_in_zone_s": 1.75,
+            "persistence_verified": true,
+            "verified_at_s": 5.5,
+            "coarse_vest_ratio": 0.0,
+            "coarse_ppe_status": "missing",
+            "hardhat_detected": true,
+            "shape": "upright person"
+          }
+        ],
+        "zone_tracks_to_resolve": [
+          "T1",
+          "T2",
+          "T3",
+          "T4"
+        ]
+      }
+    },
+    {
+      "step": 2,
+      "tool": "inspect_worker",
+      "input": {
+        "track_id": "T2"
+      },
+      "why": "The scene report indicates that there are four tracks that have entered the zone: T1, T2, T3, and T4. T1 and T3 are PPE-compliant, while T2 and T4 are missing PPE. T3 has not had its persistence verified, so I will log and monitor it. For T2 and T4, I need to inspect their PPE more carefully before taking any action.",
+      "output": {
+        "vest_present": false,
+        "vest_coverage": 0.0,
+        "vest_span": 0.0,
+        "hardhat_present": false,
+        "method": "upscale2x + hue/sat chromaticity + morph-open + largest-component span",
+        "track_id": "T2",
+        "frame": 12
+      }
+    },
+    {
+      "step": 3,
+      "tool": "inspect_worker",
+      "input": {
+        "track_id": "T4"
+      },
+      "why": "The scene report indicates that there are four tracks that have entered the zone: T1, T2, T3, and T4. T1 and T3 are PPE-compliant, while T2 and T4 are missing PPE. T3 has not had its persistence verified, so I will log and monitor it. For T2 and T4, I need to inspect their PPE more carefully before taking any action.",
+      "output": {
+        "vest_present": true,
+        "vest_coverage": 0.894,
+        "vest_span": 1.0,
+        "hardhat_present": true,
+        "method": "upscale2x + hue/sat chromaticity + morph-open + largest-component span",
+        "track_id": "T4",
+        "frame": 20
+      }
+    },
+    {
+      "step": 4,
+      "tool": "log_and_monitor",
+      "input": {
+        "reason": "Transient entry, persistence not verified",
+        "track_id": "T3"
+      },
+      "why": "The scene report indicates that there are four tracks that have entered the zone: T1, T2, T3, and T4. T1 and T3 are PPE-compliant, while T2 and T4 are missing PPE. T3 has not had its persistence verified, so I will log and monitor it. For T2 and T4, I need to inspect their PPE more carefully before taking any action.",
+      "output": {
+        "action": "log_and_monitor",
+        "track_id": "T3",
+        "reason": "Transient entry, persistence not verified",
+        "status": "executed",
+        "delivery": {
+          "action": "log_and_monitor",
+          "track_id": "T3",
+          "reason": "Transient entry, persistence not verified",
+          "delivery": "recorded (offline)",
+          "evidence_bytes": 50477
+        }
+      }
+    },
+    {
+      "step": 5,
+      "tool": "trigger_estop_alert",
+      "input": {
+        "reason": "Persistent intrusion without PPE",
+        "track_id": "T2"
+      },
+      "why": "The inspection results show that T2 is missing PPE and T4 is PPE-compliant. Since T2 is a persistent intrusion without PPE, I will trigger an E-stop alert. T4, being PPE-compliant, will request supervisor approval. T1 is already PPE-compliant and persistence-verified, so no action is needed for it.",
+      "output": {
+        "action": "trigger_estop_alert",
+        "track_id": "T2",
+        "reason": "Persistent intrusion without PPE",
+        "status": "executed",
+        "delivery": {
+          "action": "trigger_estop_alert",
+          "track_id": "T2",
+          "reason": "Persistent intrusion without PPE",
+          "delivery": "recorded (offline)",
+          "evidence_bytes": 51155
+        }
+      }
+    },
+    {
+      "step": 6,
+      "tool": "request_supervisor_approval",
+      "input": {
+        "reason": "Authorized entry with PPE",
+        "track_id": "T4"
+      },
+      "why": "The inspection results show that T2 is missing PPE and T4 is PPE-compliant. Since T2 is a persistent intrusion without PPE, I will trigger an E-stop alert. T4, being PPE-compliant, will request supervisor approval. T1 is already PPE-compliant and persistence-verified, so no action is needed for it.",
+      "output": {
+        "action": "request_supervisor_approval",
+        "track_id": "T4",
+        "reason": "Authorized entry with PPE",
+        "status": "executed",
+        "delivery": {
+          "action": "request_supervisor_approval",
+          "track_id": "T4",
+          "reason": "Authorized entry with PPE",
+          "delivery": "recorded (offline)",
+          "evidence_bytes": 52465
+        }
+      }
+    },
+    {
+      "step": 7,
+      "tool": "controller",
+      "input": {
+        "unresolved": [
+          "T1"
+        ]
+      },
+      "why": "Agent finished with zone tracks still unresolved; asking it to resolve them.",
+      "output": {
+        "status": "nudge"
+      }
+    },
+    {
+      "step": 8,
+      "tool": "log_and_monitor",
+      "input": {
+        "reason": "PPE-compliant and persistence-verified entry",
+        "track_id": "T1"
+      },
+      "why": "",
+      "output": {
+        "action": "log_and_monitor",
+        "track_id": "T1",
+        "status": "blocked_by_guardrail",
+        "reason": "verified intrusions must be escalated (supervisor approval or E-stop), not just logged"
+      }
+    },
+    {
+      "step": 9,
+      "tool": "controller",
+      "input": {
+        "unresolved": [
+          "T1"
+        ]
+      },
+      "why": "Agent finished with zone tracks still unresolved; asking it to resolve them.",
+      "output": {
+        "status": "nudge"
+      }
+    },
+    {
+      "step": 10,
+      "tool": "request_supervisor_approval",
+      "input": {
+        "reason": "Authorized entry with PPE",
+        "track_id": "T1"
+      },
+      "why": "",
+      "output": {
+        "action": "request_supervisor_approval",
+        "track_id": "T1",
+        "reason": "Authorized entry with PPE",
+        "status": "executed",
+        "delivery": {
+          "action": "request_supervisor_approval",
+          "track_id": "T1",
+          "reason": "Authorized entry with PPE",
+          "delivery": "recorded (offline)",
+          "evidence_bytes": 50749
+        }
+      }
+    }
+  ],
+  "guardrail_blocks": [
+    {
+      "action": "log_and_monitor",
+      "track_id": "T1",
+      "status": "blocked_by_guardrail",
+      "reason": "verified intrusions must be escalated (supervisor approval or E-stop), not just logged"
+    }
+  ],
+  "decisions": {
+    "T3": {
+      "action": "log_and_monitor",
+      "reason": "Transient entry, persistence not verified"
+    },
+    "T2": {
+      "action": "trigger_estop_alert",
+      "reason": "Persistent intrusion without PPE"
+    },
+    "T4": {
+      "action": "request_supervisor_approval",
+      "reason": "Authorized entry with PPE"
+    },
+    "T1": {
+      "action": "request_supervisor_approval",
+      "reason": "Authorized entry with PPE"
+    }
+  },
+  "agent_closing_note": "All tracks have now been resolved. T1, which was PPE-compliant and persistence-verified, has been escalated by requesting supervisor approval. This completes the resolution of all zone tracks. During the shift, the robot cell experienced a persistent intrusion by track T2, which lacked personal protective equipment (PPE). An E-stop alert was triggered to ensure safety. Track T4, which was PPE-compliant, requested supervisor approval for authorized entry. Track T3, which had a transient entry without persistence verification, was logged and monitored. Finally, track T1, being PPE-compliant and persistence-verified, requested supervisor approval for authorized entry. All zone tracks have been resolved."
+}

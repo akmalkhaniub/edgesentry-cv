@@ -48,6 +48,7 @@ class EdgeSentryPipeline:
         self.hazard.register_zone(zone_id, vertices, name)
 
     def draw_zones(self, frame: np.ndarray) -> np.ndarray:
+        frame = frame.copy()  # never draw on the caller's frame (keeps later analysis clean)
         overlay = frame.copy()
         for zone in self.hazard.zones:
             cv2.fillPoly(overlay, [zone.polygon], _ZONE_COLOR)
@@ -55,7 +56,8 @@ class EdgeSentryPipeline:
             cv2.putText(frame, zone.name, tuple(zone.polygon[0]), cv2.FONT_HERSHEY_SIMPLEX, 0.6, _ZONE_COLOR, 2)
         return cv2.addWeighted(overlay, 0.20, frame, 0.80, 0)
 
-    def process_frame(self, frame: np.ndarray, now: float | None = None, detections: Sequence[Detection] | None = None) -> FrameResult:
+    def process_frame(self, frame: np.ndarray, now: float | None = None, detections: Sequence[Detection] | None = None,
+                      annotate: bool = True) -> FrameResult:
         if detections is not None:
             dets = list(detections)
         elif self.detector is not None:
@@ -65,6 +67,9 @@ class EdgeSentryPipeline:
         violations = self.hazard.evaluate(dets)
         verified = self.temporal.update(violations, now=now)
 
+        if not annotate:  # caller draws its own overlay (e.g. edgesentry.overlay)
+            dispatched = [self.dispatcher.dispatch(a, frame) for a in verified]
+            return FrameResult(detections=dets, violations=violations, verified=verified, dispatched=dispatched, annotated=frame)
         annotated = self.draw_zones(frame)
         violating_ids = {v.entity_id for v in violations}
         for det in dets:

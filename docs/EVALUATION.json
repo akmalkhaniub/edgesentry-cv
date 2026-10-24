@@ -1,0 +1,699 @@
+{
+  "generated_at": "2026-10-24T02:12:04Z",
+  "environment": {
+    "python": "3.14.3",
+    "opencv": "5.0.0",
+    "numpy": "2.4.4",
+    "platform": "Windows-10-10.0.19045-SP0",
+    "processor": "Intel64 Family 6 Model 69 Stepping 1, GenuineIntel"
+  },
+  "robustness_sweep": [
+    {
+      "variant": "baseline",
+      "description": "Reference clip: 4 workers, 24 frames at 4 fps",
+      "workers": 4,
+      "tracks": 4,
+      "workers_matched": 4,
+      "perception_fps": 22.8,
+      "decision_accuracy": 1.0,
+      "false_estops": 0,
+      "missed_estops": 0,
+      "errors": [],
+      "camera": {
+        "max_drift_corrected_px": 0.0,
+        "max_lighting_offset": 0.0,
+        "max_foreground_fraction": 0.0655
+      },
+      "coarse_only": {
+        "decision_accuracy": 0.75,
+        "false_estops": 1,
+        "missed_estops": 0
+      },
+      "without_robustness_steps": {
+        "decision_accuracy": 1.0,
+        "false_estops": 0,
+        "missed_estops": 0
+      }
+    },
+    {
+      "variant": "noise_seed_1",
+      "description": "Baseline with a different sensor-noise seed",
+      "workers": 4,
+      "tracks": 4,
+      "workers_matched": 4,
+      "perception_fps": 25.5,
+      "decision_accuracy": 1.0,
+      "false_estops": 0,
+      "missed_estops": 0,
+      "errors": [],
+      "camera": {
+        "max_drift_corrected_px": 0.0,
+        "max_lighting_offset": 0.0,
+        "max_foreground_fraction": 0.0655
+      },
+      "coarse_only": {
+        "decision_accuracy": 0.75,
+        "false_estops": 1,
+        "missed_estops": 0
+      },
+      "without_robustness_steps": {
+        "decision_accuracy": 1.0,
+        "false_estops": 0,
+        "missed_estops": 0
+      }
+    },
+    {
+      "variant": "noise_seed_99",
+      "description": "Baseline with a different sensor-noise seed",
+      "workers": 4,
+      "tracks": 4,
+      "workers_matched": 4,
+      "perception_fps": 26.5,
+      "decision_accuracy": 1.0,
+      "false_estops": 0,
+      "missed_estops": 0,
+      "errors": [],
+      "camera": {
+        "max_drift_corrected_px": 0.0,
+        "max_lighting_offset": 0.0,
+        "max_foreground_fraction": 0.0655
+      },
+      "coarse_only": {
+        "decision_accuracy": 0.75,
+        "false_estops": 1,
+        "missed_estops": 0
+      },
+      "without_robustness_steps": {
+        "decision_accuracy": 1.0,
+        "false_estops": 0,
+        "missed_estops": 0
+      }
+    },
+    {
+      "variant": "sensor_noise_8",
+      "description": "Extra Gaussian sensor noise, sigma 8",
+      "workers": 4,
+      "tracks": 4,
+      "workers_matched": 4,
+      "perception_fps": 26.3,
+      "decision_accuracy": 1.0,
+      "false_estops": 0,
+      "missed_estops": 0,
+      "errors": [],
+      "camera": {
+        "max_drift_corrected_px": 0.0,
+        "max_lighting_offset": 0.0,
+        "max_foreground_fraction": 0.0655
+      },
+      "coarse_only": {
+        "decision_accuracy": 0.75,
+        "false_estops": 1,
+        "missed_estops": 0
+      },
+      "without_robustness_steps": {
+        "decision_accuracy": 1.0,
+        "false_estops": 0,
+        "missed_estops": 0
+      }
+    },
+    {
+      "variant": "sensor_noise_16",
+      "description": "Extra Gaussian sensor noise, sigma 16",
+      "workers": 4,
+      "tracks": 4,
+      "workers_matched": 4,
+      "perception_fps": 26.7,
+      "decision_accuracy": 1.0,
+      "false_estops": 0,
+      "missed_estops": 0,
+      "errors": [],
+      "camera": {
+        "max_drift_corrected_px": 0.0,
+        "max_lighting_offset": 0.0,
+        "max_foreground_fraction": 0.0655
+      },
+      "coarse_only": {
+        "decision_accuracy": 0.75,
+        "false_estops": 1,
+        "missed_estops": 0
+      },
+      "without_robustness_steps": {
+        "decision_accuracy": 1.0,
+        "false_estops": 0,
+        "missed_estops": 0
+      }
+    },
+    {
+      "variant": "lighting_plus_30",
+      "description": "Scene 30 levels brighter than the clean plate",
+      "workers": 4,
+      "tracks": 4,
+      "workers_matched": 4,
+      "perception_fps": 13.1,
+      "decision_accuracy": 1.0,
+      "false_estops": 0,
+      "missed_estops": 0,
+      "errors": [],
+      "camera": {
+        "max_drift_corrected_px": 0.0,
+        "max_lighting_offset": 30.0,
+        "max_foreground_fraction": 0.0655
+      },
+      "coarse_only": {
+        "decision_accuracy": 1.0,
+        "false_estops": 0,
+        "missed_estops": 0
+      },
+      "without_robustness_steps": {
+        "decision_accuracy": 0.25,
+        "false_estops": 0,
+        "missed_estops": 1
+      }
+    },
+    {
+      "variant": "lighting_minus_30",
+      "description": "Scene 30 levels darker than the clean plate",
+      "workers": 4,
+      "tracks": 4,
+      "workers_matched": 4,
+      "perception_fps": 15.8,
+      "decision_accuracy": 1.0,
+      "false_estops": 0,
+      "missed_estops": 0,
+      "errors": [],
+      "camera": {
+        "max_drift_corrected_px": 0.0,
+        "max_lighting_offset": 30.0,
+        "max_foreground_fraction": 0.0655
+      },
+      "coarse_only": {
+        "decision_accuracy": 0.75,
+        "false_estops": 1,
+        "missed_estops": 0
+      },
+      "without_robustness_steps": {
+        "decision_accuracy": 1.0,
+        "false_estops": 0,
+        "missed_estops": 0
+      }
+    },
+    {
+      "variant": "camera_shift_3px",
+      "description": "Camera bumped 3 px right / 1 px down",
+      "workers": 4,
+      "tracks": 4,
+      "workers_matched": 4,
+      "perception_fps": 20.1,
+      "decision_accuracy": 1.0,
+      "false_estops": 0,
+      "missed_estops": 0,
+      "errors": [],
+      "camera": {
+        "max_drift_corrected_px": 3.66,
+        "max_lighting_offset": 0.0,
+        "max_foreground_fraction": 0.0655
+      },
+      "coarse_only": {
+        "decision_accuracy": 0.75,
+        "false_estops": 1,
+        "missed_estops": 0
+      },
+      "without_robustness_steps": {
+        "decision_accuracy": 1.0,
+        "false_estops": 0,
+        "missed_estops": 0
+      }
+    },
+    {
+      "variant": "camera_shift_8px",
+      "description": "Camera bumped 8 px right / 4 px down",
+      "workers": 4,
+      "tracks": 4,
+      "workers_matched": 4,
+      "perception_fps": 22.1,
+      "decision_accuracy": 1.0,
+      "false_estops": 0,
+      "missed_estops": 0,
+      "errors": [],
+      "camera": {
+        "max_drift_corrected_px": 8.97,
+        "max_lighting_offset": 0.0,
+        "max_foreground_fraction": 0.0655
+      },
+      "coarse_only": {
+        "decision_accuracy": 0.75,
+        "false_estops": 1,
+        "missed_estops": 0
+      },
+      "without_robustness_steps": {
+        "decision_accuracy": 0.0,
+        "false_estops": 0,
+        "missed_estops": 1
+      }
+    },
+    {
+      "variant": "half_frame_rate",
+      "description": "Same script sampled at 2 fps (12 s clip)",
+      "workers": 4,
+      "tracks": 4,
+      "workers_matched": 4,
+      "perception_fps": 27.6,
+      "decision_accuracy": 1.0,
+      "false_estops": 0,
+      "missed_estops": 0,
+      "errors": [],
+      "camera": {
+        "max_drift_corrected_px": 0.0,
+        "max_lighting_offset": 0.0,
+        "max_foreground_fraction": 0.0655
+      },
+      "coarse_only": {
+        "decision_accuracy": 0.75,
+        "false_estops": 1,
+        "missed_estops": 0
+      },
+      "without_robustness_steps": {
+        "decision_accuracy": 1.0,
+        "false_estops": 0,
+        "missed_estops": 0
+      }
+    },
+    {
+      "variant": "deeper_shadow_0.15",
+      "description": "Contractor's vest keeps 15% of its brightness",
+      "workers": 4,
+      "tracks": 4,
+      "workers_matched": 4,
+      "perception_fps": 27.7,
+      "decision_accuracy": 1.0,
+      "false_estops": 0,
+      "missed_estops": 0,
+      "errors": [],
+      "camera": {
+        "max_drift_corrected_px": 0.0,
+        "max_lighting_offset": 0.0,
+        "max_foreground_fraction": 0.0656
+      },
+      "coarse_only": {
+        "decision_accuracy": 0.75,
+        "false_estops": 1,
+        "missed_estops": 0
+      },
+      "without_robustness_steps": {
+        "decision_accuracy": 1.0,
+        "false_estops": 0,
+        "missed_estops": 0
+      }
+    },
+    {
+      "variant": "deeper_shadow_0.08",
+      "description": "Contractor's vest keeps 8% of its brightness",
+      "workers": 4,
+      "tracks": 4,
+      "workers_matched": 4,
+      "perception_fps": 28.1,
+      "decision_accuracy": 0.75,
+      "false_estops": 1,
+      "missed_estops": 0,
+      "errors": [
+        "W-15: expected request_supervisor_approval, got trigger_estop_alert"
+      ],
+      "camera": {
+        "max_drift_corrected_px": 0.0,
+        "max_lighting_offset": 0.0,
+        "max_foreground_fraction": 0.0656
+      },
+      "coarse_only": {
+        "decision_accuracy": 0.75,
+        "false_estops": 1,
+        "missed_estops": 0
+      },
+      "without_robustness_steps": {
+        "decision_accuracy": 0.75,
+        "false_estops": 1,
+        "missed_estops": 0
+      }
+    },
+    {
+      "variant": "adjacent_workers",
+      "description": "Two workers shoulder to shoulder (blobs merge)",
+      "workers": 2,
+      "tracks": 2,
+      "workers_matched": 2,
+      "perception_fps": 25.7,
+      "decision_accuracy": 1.0,
+      "false_estops": 0,
+      "missed_estops": 0,
+      "errors": [],
+      "camera": {
+        "max_drift_corrected_px": 0.0,
+        "max_lighting_offset": 0.0,
+        "max_foreground_fraction": 0.0329
+      },
+      "coarse_only": {
+        "decision_accuracy": 1.0,
+        "false_estops": 0,
+        "missed_estops": 0
+      },
+      "without_robustness_steps": {
+        "decision_accuracy": 0.0,
+        "false_estops": 0,
+        "missed_estops": 1
+      }
+    },
+    {
+      "variant": "stress_three_in_a_row",
+      "description": "Three workers shoulder to shoulder",
+      "workers": 3,
+      "tracks": 3,
+      "workers_matched": 3,
+      "perception_fps": 26.2,
+      "decision_accuracy": 1.0,
+      "false_estops": 0,
+      "missed_estops": 0,
+      "errors": [],
+      "camera": {
+        "max_drift_corrected_px": 0.0,
+        "max_lighting_offset": 0.0,
+        "max_foreground_fraction": 0.0496
+      },
+      "coarse_only": {
+        "decision_accuracy": 1.0,
+        "false_estops": 0,
+        "missed_estops": 0
+      },
+      "without_robustness_steps": {
+        "decision_accuracy": 0.0,
+        "false_estops": 0,
+        "missed_estops": 1
+      }
+    },
+    {
+      "variant": "stress_lighting_plus_80",
+      "description": "Scene 80 levels brighter (highlights clip)",
+      "workers": 4,
+      "tracks": 4,
+      "workers_matched": 4,
+      "perception_fps": 16.4,
+      "decision_accuracy": 1.0,
+      "false_estops": 0,
+      "missed_estops": 0,
+      "errors": [],
+      "camera": {
+        "max_drift_corrected_px": 0.0,
+        "max_lighting_offset": 80.0,
+        "max_foreground_fraction": 0.0657
+      },
+      "coarse_only": {
+        "decision_accuracy": 1.0,
+        "false_estops": 0,
+        "missed_estops": 0
+      },
+      "without_robustness_steps": {
+        "decision_accuracy": 0.0,
+        "false_estops": 0,
+        "missed_estops": 1
+      }
+    },
+    {
+      "variant": "stress_camera_rotate_1deg",
+      "description": "Camera rotated 1 degree about the image centre",
+      "workers": 4,
+      "tracks": 4,
+      "workers_matched": 4,
+      "perception_fps": 21.2,
+      "decision_accuracy": 1.0,
+      "false_estops": 0,
+      "missed_estops": 0,
+      "errors": [],
+      "camera": {
+        "max_drift_corrected_px": 12.7,
+        "max_lighting_offset": 0.0,
+        "max_foreground_fraction": 0.0656
+      },
+      "coarse_only": {
+        "decision_accuracy": 0.75,
+        "false_estops": 1,
+        "missed_estops": 0
+      },
+      "without_robustness_steps": {
+        "decision_accuracy": 0.5,
+        "false_estops": 0,
+        "missed_estops": 1
+      }
+    },
+    {
+      "variant": "stress_crouching_worker",
+      "description": "Worker kneeling in the cell (wider than tall)",
+      "workers": 1,
+      "tracks": 1,
+      "workers_matched": 1,
+      "perception_fps": 25.8,
+      "decision_accuracy": 1.0,
+      "false_estops": 0,
+      "missed_estops": 0,
+      "errors": [],
+      "camera": {
+        "max_drift_corrected_px": 0.0,
+        "max_lighting_offset": 0.0,
+        "max_foreground_fraction": 0.0117
+      },
+      "coarse_only": {
+        "decision_accuracy": 1.0,
+        "false_estops": 0,
+        "missed_estops": 0
+      },
+      "without_robustness_steps": {
+        "decision_accuracy": 1.0,
+        "false_estops": 0,
+        "missed_estops": 0
+      }
+    }
+  ],
+  "agent_trials": {
+    "model_family": "Amazon Nova (Bedrock Converse API, tool use)",
+    "region": "us-east-1",
+    "trials": [
+      {
+        "trial": 1,
+        "decided_by": "bedrock",
+        "fallback_reason": null,
+        "decision_accuracy": 1.0,
+        "false_estops": 0,
+        "missed_estops": 0,
+        "guardrail_blocks": 1,
+        "controller_nudges": 1,
+        "blocked": [
+          {
+            "action": "log_and_monitor",
+            "track_id": "T1",
+            "reason": "verified intrusions must be escalated (supervisor approval or E-stop), not just logged"
+          }
+        ],
+        "nudged_for": [
+          [
+            "T1"
+          ]
+        ],
+        "steps": 9,
+        "latency_s": 12.09
+      },
+      {
+        "trial": 2,
+        "decided_by": "bedrock",
+        "fallback_reason": null,
+        "decision_accuracy": 1.0,
+        "false_estops": 0,
+        "missed_estops": 0,
+        "guardrail_blocks": 0,
+        "controller_nudges": 1,
+        "blocked": [],
+        "nudged_for": [
+          [
+            "T1"
+          ]
+        ],
+        "steps": 8,
+        "latency_s": 8.15
+      },
+      {
+        "trial": 3,
+        "decided_by": "bedrock",
+        "fallback_reason": null,
+        "decision_accuracy": 1.0,
+        "false_estops": 0,
+        "missed_estops": 0,
+        "guardrail_blocks": 1,
+        "controller_nudges": 2,
+        "blocked": [
+          {
+            "action": "log_and_monitor",
+            "track_id": "T1",
+            "reason": "verified intrusions must be escalated (supervisor approval or E-stop), not just logged"
+          }
+        ],
+        "nudged_for": [
+          [
+            "T1"
+          ],
+          [
+            "T1"
+          ]
+        ],
+        "steps": 10,
+        "latency_s": 11.4
+      },
+      {
+        "trial": 4,
+        "decided_by": "bedrock",
+        "fallback_reason": null,
+        "decision_accuracy": 1.0,
+        "false_estops": 0,
+        "missed_estops": 0,
+        "guardrail_blocks": 0,
+        "controller_nudges": 0,
+        "blocked": [],
+        "nudged_for": [],
+        "steps": 7,
+        "latency_s": 6.85
+      },
+      {
+        "trial": 5,
+        "decided_by": "bedrock",
+        "fallback_reason": null,
+        "decision_accuracy": 1.0,
+        "false_estops": 0,
+        "missed_estops": 0,
+        "guardrail_blocks": 0,
+        "controller_nudges": 1,
+        "blocked": [],
+        "nudged_for": [
+          [
+            "T1"
+          ]
+        ],
+        "steps": 8,
+        "latency_s": 8.81
+      },
+      {
+        "trial": 6,
+        "decided_by": "bedrock",
+        "fallback_reason": null,
+        "decision_accuracy": 1.0,
+        "false_estops": 0,
+        "missed_estops": 0,
+        "guardrail_blocks": 1,
+        "controller_nudges": 2,
+        "blocked": [
+          {
+            "action": "log_and_monitor",
+            "track_id": "T1",
+            "reason": "verified intrusions must be escalated (supervisor approval or E-stop), not just logged"
+          }
+        ],
+        "nudged_for": [
+          [
+            "T1"
+          ],
+          [
+            "T1"
+          ]
+        ],
+        "steps": 10,
+        "latency_s": 11.25
+      },
+      {
+        "trial": 7,
+        "decided_by": "bedrock",
+        "fallback_reason": null,
+        "decision_accuracy": 1.0,
+        "false_estops": 0,
+        "missed_estops": 0,
+        "guardrail_blocks": 1,
+        "controller_nudges": 1,
+        "blocked": [
+          {
+            "action": "log_and_monitor",
+            "track_id": "T1",
+            "reason": "verified intrusions must be escalated (supervisor approval or E-stop), not just logged"
+          }
+        ],
+        "nudged_for": [
+          [
+            "T1"
+          ]
+        ],
+        "steps": 9,
+        "latency_s": 9.49
+      },
+      {
+        "trial": 8,
+        "decided_by": "bedrock",
+        "fallback_reason": null,
+        "decision_accuracy": 1.0,
+        "false_estops": 0,
+        "missed_estops": 0,
+        "guardrail_blocks": 0,
+        "controller_nudges": 1,
+        "blocked": [],
+        "nudged_for": [
+          [
+            "T1"
+          ]
+        ],
+        "steps": 8,
+        "latency_s": 8.5
+      },
+      {
+        "trial": 9,
+        "decided_by": "bedrock",
+        "fallback_reason": null,
+        "decision_accuracy": 1.0,
+        "false_estops": 0,
+        "missed_estops": 0,
+        "guardrail_blocks": 0,
+        "controller_nudges": 1,
+        "blocked": [],
+        "nudged_for": [
+          [
+            "T1"
+          ]
+        ],
+        "steps": 8,
+        "latency_s": 8.59
+      },
+      {
+        "trial": 10,
+        "decided_by": "bedrock",
+        "fallback_reason": null,
+        "decision_accuracy": 1.0,
+        "false_estops": 0,
+        "missed_estops": 0,
+        "guardrail_blocks": 0,
+        "controller_nudges": 1,
+        "blocked": [],
+        "nudged_for": [
+          [
+            "T1"
+          ]
+        ],
+        "steps": 8,
+        "latency_s": 7.97
+      }
+    ],
+    "summary": {
+      "n": 10,
+      "completed_by_agent": 10,
+      "fell_back_to_policy": 0,
+      "all_correct_runs": 10,
+      "mean_accuracy": 1.0,
+      "false_estops_total": 0,
+      "missed_estops_total": 0,
+      "guardrail_blocks_total": 4,
+      "runs_needing_a_nudge": 9,
+      "agent_latency_s_median": 8.7,
+      "agent_latency_s_max": 12.09
+    },
+    "generated_at": "2026-10-24T02:06:54Z"
+  }
+}

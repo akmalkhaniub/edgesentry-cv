@@ -1,5 +1,30 @@
 # Changelog
 
+## [2.0.0] - 2026-10-24
+
+### Added
+- Agentic perception → decision → action loop (`edgesentry/agent.py`): OpenCV tools
+  (`get_scene_report`, `inspect_worker`), action tools, code guardrails, Bedrock Converse
+  tool-use loop with a completeness controller, and a deterministic fallback policy.
+- Clean-plate detector hardening (`edgesentry/detector.py`): phase-correlation + ECC camera
+  registration with foreground masking, lighting compensation, misalignment-tolerant
+  envelope differencing, head-profile group splitting, fail-safe "unrecognized" shapes,
+  camera-health signals.
+- Cloud service and Lambda handler (`edgesentry/service.py`, `lambda_function.py`): S3
+  evidence, SNS alerts, CloudWatch EMF metrics, daily usage caps, supervisor decisions.
+- Web app (`edgesentry/web/index.html`) and a causal frame overlay (`edgesentry/overlay.py`).
+- AWS infrastructure (`infra/`): CloudFormation template, deploy and teardown scripts.
+- Evaluation (`scripts/evaluate.py`, `scripts/live_check.py`) with results in `docs/`.
+- Technical report (`docs/TECHNICAL_REPORT.md`).
+
+### Changed
+- Dependencies pinned (`numpy==2.4.4`, `opencv-python-headless==5.0.0.93`); Python 3.11+.
+- `EdgeSentryPipeline.draw_zones` no longer mutates the caller's frame.
+
+### Removed
+- `docs/PITCH_DECK.md`, `docs/pitch_deck.html`: they stated performance numbers that were
+  never measured in this build.
+
 ## [Unreleased]
 
 ### Rebuilt in Python + OpenCV (2026-09-18)

@@ -1,173 +1,104 @@
-# 🚀 EdgeSentry CV — Official Devpost Submission
-**Hackathon:** [OpenCV AI Competition 2026 (powered by AWS)](https://opencv26.devpost.com/)  
-**Track:** Embedded Edge Vision & Serverless Industrial Safety  
-**Prize Pool:** $20,250 USD  
-**Author:** Akmal Khan (@akmalkhaniub)  
-**Repository:** [https://github.com/akmalkhaniub/edgesentry-cv](https://github.com/akmalkhaniub/edgesentry-cv)  
+# Devpost submission text: EdgeSentry
+
+Copy-paste source for the Devpost form. Every number links back to a file in the repo.
+
+**Project name:** EdgeSentry
+
+**Tagline:** A robot-cell safety agent: OpenCV 5 sees who is really in the hazard zone,
+Amazon Bedrock decides, and code guardrails make sure it never stops the line without proof.
+
+**Category / award:** OpenCV AI Competition 2026 main track + Agentic Vision Award
+
+**Links**
+- Live app: https://jzyv7mljhphuteckul2lxqe77u0xbqev.lambda-url.us-east-1.on.aws/
+- Code: https://github.com/akmalkhaniub/edgesentry-cv
+- Technical report: https://github.com/akmalkhaniub/edgesentry-cv/blob/main/docs/TECHNICAL_REPORT.md
 
 ---
 
-## 📌 Project Overview
+## Inspiration
 
-### Project Title
-**EdgeSentry CV**
+Camera "person detected" alerts around industrial robots get switched off. They fire when
+someone brushes the boundary of the cell, or when a vest falls into shadow, and every false
+stop costs production. They also treat a technician doing planned maintenance the same as an
+unprotected worker wandering in. We wanted a camera system that behaves like a careful
+safety lead: look again before stopping anything, ask a person when an entry looks
+authorised, and show the evidence for every call.
 
-### Tagline
-*3D Spatial Industrial Hazard Sentinel powered by Luxonis OAK-D Stereo Depth, OpenCV 5, YOLO26, and AWS IoT Greengrass v2.*
+## What it does
 
----
+EdgeSentry analyses the robot-cell camera and, for every person who entered the hazard zone,
+takes one of three actions:
 
-## 💡 Elevator Pitch
-EdgeSentry CV is an autonomous, on-device spatial intelligence system engineered to eliminate workplace injuries in heavy robotic workcells and industrial manufacturing. By pairing Luxonis OAK-D stereo depth cameras with OpenCV 5 ray-casting geofencing and AWS IoT Greengrass v2 edge IPC, EdgeSentry calculates true Cartesian coordinates ($X, Y, Z$ in meters), eliminates 99.4% of false alarms via temporal debounce filtering, and triggers physical robotic Emergency Stop (E-Stop) relays in under 15 milliseconds—with zero cloud latency or bandwidth bloat.
+- **Protective stop + alert**: only for an intrusion that persisted 1.5 s **and** where a
+  close-up re-inspection confirmed no hi-vis vest.
+- **Supervisor approval**: verified entries by people wearing PPE. The supervisor answers
+  "approve entry" or "stop the robot" from the web app.
+- **Log and keep monitoring**: brief boundary-brushing.
 
----
+Each action stores an evidence frame in S3 and, for stops and approvals, publishes an SNS
+alert. The web app leads with the outcome, then shows the evidence, the annotated clip, every
+step the agent took, and a check against ground truth.
 
-## ✅ Verified engineering metrics (measured, not claimed)
+## How we built it
 
-| What | Evidence | How to check |
-| :--- | :--- | :--- |
-| **~27 FPS** end-to-end (capture → detect → zone → temporal → annotate) on synthetic frames with the model-free contour detector | `docs/BENCH.json` (40 frames, 1.47s) | `edgesentry --source clip.mp4` |
-| **Model-free** detectors that run with no ONNX model or GPU: `ContourDetector` (threshold + connected components) and `MotionDetector` (MOG2) | `edgesentry/detector.py` | `pytest tests/test_detectors.py` |
-| Real OpenCV geometry: `cv2.pointPolygonTest` zone intrusion, HSV hi-vis PPE via `cv2.inRange` | `edgesentry/hazard_detector.py`, `detector.py` | `pytest -q` (25 passing) |
-| Temporal debounce (suppresses flicker) + AWS SNS/S3 dispatch (simulator fallback) | `temporal_filter.py`, `aws_dispatch.py` | `edgesentry --demo` |
-| **96% line coverage**, CI on Python 3.10–3.12 | `.coveragerc`, `ci/ci.workflow.yml` | `coverage run -m pytest && coverage report` |
+- **OpenCV 5 perception (all classical, no trained model).** The camera is registered to the
+  empty-cell reference with `phaseCorrelate` + `findTransformECC` (foreground-masked,
+  accepted only if `computeECC` improves). Lighting is compensated, and the difference image
+  is misalignment-tolerant (`erode`/`dilate` plate envelopes). Then Otsu, morphology,
+  `connectedComponentsWithStats`, head-profile splitting of groups, centroid tracking,
+  `pointPolygonTest` on foot points, and a persistence filter. PPE uses HSV `inRange` in the
+  wide view. The close-up tool upscales 2×, tests chromaticity only, and measures the largest
+  connected band.
+- **Agent on Amazon Bedrock.** Amazon Nova Pro via the Converse API with tool use. The agent
+  never sees pixels; it calls OpenCV tools (`get_scene_report`, `inspect_worker`) and action
+  tools. Guardrails in code veto unproven stops, unverified approvals, and logging a verified
+  intrusion. A controller sends the agent back when it leaves anyone unresolved. If Bedrock is
+  unavailable, a deterministic policy runs the same tools under the same guardrails, and the UI
+  says so.
+- **AWS.** One Lambda (Python 3.12) behind a Function URL serves the UI and API. S3 holds
+  evidence (private, encrypted, expiring), SNS sends alerts (KMS), DynamoDB caps public usage
+  per day, and CloudWatch handles EMF metrics, alarms, a dashboard and X-Ray. All of it is one
+  CloudFormation template and a deploy script.
 
-> Honesty note: the tagline's OAK-D / YOLO26 / Greengrass are the *target* production stack. This submission runs a genuine OpenCV pipeline with **classical, model-free** detection (so it works on any laptop with no trained model), plus a ready `OnnxDetector` (`cv2.dnn`) to plug a trained model in. AWS dispatch is real boto3 with a simulator fallback; there is no deployed cloud endpoint.
+## Challenges we ran into
 
-## 🔍 Inspiration
-In heavy fabrication cells, automotive welding lines, and construction zones, over **2.8 million workplace injuries** occur annually. When a worker steps into the path of an automated robotic arm, every millisecond counts. Traditional cloud computer vision systems fail in heavy industry because:
-1. **Unacceptable Latency (>500ms to 2s)**: Too slow to stop a high-speed robotic arm before contact.
-2. **Bandwidth Saturation**: Streaming multiple 4K video feeds overwhelms industrial factory networks.
-3. **Alarm Fatigue**: Shadows and momentary transient sensor noise cause constant false alarms, prompting workers to disable safety interlocks.
+- Our evaluation sweep broke our first detector: a 3 px camera bump made every edge
+  foreground (0 of 4 workers found). Fixing it led to phase correlation + ECC registration and
+  envelope differencing.
+- Three bright vests pulled ECC to a false 0.9° rotation. We fixed it by masking foreground
+  out of the alignment and keeping the result only if it beats identity.
+- We found that OpenCV 5.0.0's `phaseCorrelate` windows its inputs **in place**, silently
+  erasing our stored reference. We pass copies, and a regression test pins it.
+- The language model reliably skipped the "boring" compliant worker, and sometimes tried to
+  just log a verified intrusion. Prompting alone did not fix it; the controller and guardrails
+  did.
 
-We asked: **What if the camera itself could compute 3D spatial coordinates in real meters and trip the hardware safety circuit locally in 14 milliseconds, while using the AWS cloud solely for forensic compliance clips?**
+## Accomplishments we're proud of
 
----
+- 10/10 live Bedrock agent runs fully correct, with 0 false and 0 missed stops. The guardrails
+  blocked 4 unsafe actions along the way, and 9 runs needed the controller.
+- 16 of 17 robustness variants fully correct, including camera shift, 1° rotation, ±30 and
+  +80 lighting, two and three workers shoulder to shoulder, and a kneeling worker. The one
+  failure fails safe.
+- Ablations quantify each piece: without the close-up the shadowed contractor gets a false
+  stop; without the robustness steps the system misses stops in 6 variants.
+- About 49 fps OpenCV perception at 1280×720 inside Lambda.
 
-## ⚡ What It Does
+## What we learned
 
-1. **On-Device 3D Spatial Localization**:
-   - Computes real-world Cartesian metric coordinates ($X, Y, Z$ in meters) using Luxonis OAK-D stereo disparity and OpenCV 5 coordinate transformations.
-2. **OpenCV 5 Point-in-Polygon Ray-Casting**:
-   - Evaluates worker foot positions against arbitrary polygonal danger geofences on factory floors.
-3. **Temporal Debounce Event Filtering**:
-   - Demands persistent incursion for $T_{threshold} \ge 1,500\text{ms}$ before triggering alarms, eliminating 99.4% of transient sensor noise.
-4. **AWS IoT Greengrass v2 Edge IPC**:
-   - Sub-15ms local MQTT publish (`edgesentry/cam-01/alerts`) interfacing directly with industrial PLC emergency stop relays with zero internet dependence.
-5. **Serverless Cloud Compliance Architecture**:
-   - Dispatches structured incident event envelopes to Amazon EventBridge and links forensic video clips to Amazon Kinesis Video Streams for OSHA audit readiness.
-6. **Interactive 3D Spatial Radar Console**:
-   - Live browser-based operations control room displaying real-time coordinate streaming, interactive intrusion toggles, and debounce state visualizers.
+The interesting engineering in an "AI agent" was everything around the model: tools that
+expose measured evidence, guardrails that cannot be argued with, a controller that checks
+completeness, a summary generated from what actually happened, and an evaluation that keeps
+finding the next failure.
 
----
+## What's next
 
-## 🛠️ How We Built It
+Run perception continuously on an edge device with the agent as the escalation layer, test on
+real cell footage with plate re-capture, add depth for occlusion at the feet, and integrate
+supervisor approvals with permit-to-work systems.
 
-```
-                                    +------------------------------------------------------+
-                                    |                LUXONIS OAK-D PRO EDGE                |
-                                    |                                                      |
-    [ Stereo RGB + IR Depth Sensor ] ---> [ YOLO26 Spatial Neural Inference (Sub-15ms)    ]
-                                    |       ├── 3D Bounding Cuboids (X, Y, Z in meters)    |
-                                    |       └── PPE Detection (Hardhats, High-Vis Vests)   |
-                                    +--------------------------+---------------------------+
-                                                               |
-                                                               v
-                                    +------------------------------------------------------+
-                                    |          OPENCV 5 SPATIAL HAZARD SENTINEL            |
-                                    |                                                      |
-                                    |  • Point-in-Polygon Ray Casting (Geofence Intersect) |
-                                    |  • Temporal State Machine (1,500ms Debounce Filter)   |
-                                    +--------------+------------------------+--------------+
-                                                   |                        |
-                   [ Confirmed Safety Violation ]  |                        |  [ Zero-Latency Local Trip ]
-                                                   v                        v
-            +-----------------------------------------------+      +-------------------------+
-            |          AWS IOT GREENGRASS V2 IPC            |      | Hardwired Industrial    |
-            |                                               |      | Relay / PLC E-Stop Loop |
-            |  • Local MQTT Bus: edgesentry/cam-01/alerts   |      +-------------------------+
-            |  • Local Shadow State Synchronization         |
-            +----------------------+------------------------+
-                                   |
-              [ HTTPS JSON Event via Cloud Uplink ]
-                                   |
-                                   v
-+--------------------------------------------------------------------------------------------------+
-|                                     AWS SERVERLESS CLOUD FABRIC                                  |
-|                                                                                                  |
-|   +--------------------------+    +---------------------------+    +-------------------------+   |
-|   |   Amazon EventBridge     |--->|   Amazon Kinesis Video    |--->|   CloudWatch Dashboard  |   |
-|   |   Custom Event Bus       |    |   Forensic Clip Retention |    |   & Push Notification   |   |
-|   +--------------------------+    +---------------------------+    +-------------------------+   |
-+--------------------------------------------------------------------------------------------------+
-```
+## Built with
 
-### Architecture Components
-- **Spatial Hazard Detector (`src/spatial_hazard_detector.js`)**: OpenCV 5 ray-casting algorithm calculating worker foot projection against virtual polygonal safety boundaries.
-- **Temporal Event Filter (`src/temporal_event_filter.js`)**: Debounce engine preventing spurious transient alarms.
-- **DepthAI Pipeline (`src/depthai_pipeline.js`)**: Luxonis OAK-D stereo disparity driver returning Cartesian $(X,Y,Z)$ metric coordinates.
-- **Greengrass v2 IPC (`src/greengrass_v2_client.js`)**: Local MQTT inter-process communication driver compatible with AWS IoT Greengrass Core v2.
-- **Serverless Cloud Dispatcher (`src/aws_serverless_dispatcher.js`)**: Amazon EventBridge & Kinesis Video Streams forensic clip generator.
-- **Control Room Console (`src/public/index.html` & `src/server.js`)**: Real-time 3D spatial radar and telemetry simulator.
-
----
-
-## 🧗 Challenges We Ran Into
-
-1. **Stereo Disparity to Ground-Plane Projection**:
-   - Transforming camera-relative camera ray vectors into planar $(X, Z)$ factory floor coordinates required camera extrinsic rotation matrix compensation.
-2. **Temporal Edge Debouncing**:
-   - Implementing lightweight millisecond temporal tracking on constrained edge devices without causing memory leaks or execution jitter.
-3. **Decoupled Local vs. Cloud Timing**:
-   - Ensuring the physical PLC relay trips in $<15\text{ms}$ while gracefully queueing cloud forensic clips during network outages.
-
----
-
-## 🏆 Accomplishments We're Proud Of
-
-- **100% Automated Test Coverage (6/6 Tests Passing)**: Validating polygon ray casting, temporal debounce suppression, EventBridge serverless dispatch, OAK-D 3D spatial calculation, and Greengrass v2 IPC shadow synchronization.
-- **98% Latency Reduction**: Demonstrated on-device detection in 14.2ms vs 650ms+ in cloud vision systems.
-- **Complete Submission Asset Suite**: 16:9 interactive pitch deck, cinematic hero presentation graphic, and structured 3-minute video script.
-
----
-
-## 🎓 What We Learned
-
-- How edge-native spatial depth computing (OAK-D) completely bypasses the bandwidth and latency limitations of cloud-only computer vision.
-- How pairing local Greengrass IPC with cloud EventBridge creates the optimal hybrid edge/cloud architecture for mission-critical industrial automation.
-
----
-
-## 🔮 What's Next for EdgeSentry CV
-
-1. **Multi-Camera Spatial Mesh**: Synchronizing multiple OAK-D stereo cameras across large-scale 50,000 sq ft logistics hubs.
-2. **Ultra-Wideband (UWB) Sensor Fusion**: Combining optical computer vision with active UWB badges on mobile forklifts and AGVs.
-3. **Specialized Industrial PPE Models**: On-edge classification for respirators, welding shields, and fall-arrest harnesses.
-
----
-
-## 🧪 Testing Instructions for Judges
-
-Judges can test EdgeSentry CV locally in seconds with zero hardware configuration required:
-
-```bash
-# Clone the repository
-git clone https://github.com/akmalkhaniub/edgesentry-cv.git
-cd edgesentry-cv
-
-# Install dependencies
-npm install
-
-# Run the 6-step automated verification suite
-npm test
-
-# Start the interactive operations dashboard
-npm start
-# Open http://localhost:3004 in your browser
-```
-
-### Steps to Verify in Web Console:
-1. Inspect the live **3D Spatial Radar** showing the polygonal restricted robotic zone.
-2. Trigger the simulated worker trajectory entering the restricted zone.
-3. Observe how momentary transient entries are suppressed at $t=0\text{s}$, while sustained presence triggers a **Critical Zone Intrusion Alarm** after 1,500ms.
-4. Review the emitted Greengrass v2 MQTT message and linked Amazon EventBridge / Kinesis forensic clip.
+opencv · python · numpy · amazon-bedrock · amazon-nova · aws-lambda · amazon-s3 · amazon-sns ·
+amazon-dynamodb · amazon-cloudwatch · aws-x-ray · aws-cloudformation · html · javascript
