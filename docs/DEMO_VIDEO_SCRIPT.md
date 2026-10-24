@@ -1,12 +1,20 @@
-# EdgeSentry — demo script
+# EdgeSentry demo video: script
 
-Record the Python package, not the old Node dashboard in `legacy-js/`.
+About 4 minutes, 1920×1080, burned-in captions. The app scenes are a screen recording of the
+**deployed** endpoint during a real Amazon Bedrock run; nothing is mocked. The narration voice is
+Windows text-to-speech (Microsoft Mark).
 
-## What to show
-
-1. `edgesentry --demo` — synthetic frame, zone intrusion, missing hi-vis, debounced alert. Say the dispatch is simulated unless AWS credentials are set.
-2. `edgesentry --bench --frames 60` — read the printed FPS. It is the contour pipeline on synthetic frames, not a webcam and not a trained ONNX model.
-3. If you have a clip or camera: `edgesentry --source 0 --detector hog --max-frames 100` or `--onnx path/to/model.onnx`.
-4. Do not claim Luxonis stereo, a 15 ms PLC stop, or a 99.4% false-alarm rate. Those are not measured in this build.
-
-Depth in the overlay is a bbox-height estimate, not a stereo camera.
+| # | Scene | Narration |
+|---|---|---|
+| 1 | Title and team | EdgeSentry. A safety agent for industrial robot cells, built with OpenCV 5 and AWS, by Akmal Khan, for the OpenCV AI Competition. |
+| 2 | The problem | Robots work inside fenced cells, but people still have to go in, to clear a jam or to do maintenance. Camera alerts around these cells tend to get switched off. They stop the line when someone brushes the boundary, or when a vest falls into shadow, and they treat planned maintenance like an emergency. EdgeSentry is built to act like a careful safety lead instead. |
+| 3 | Live app: run the AI safety agent | This is the live app, running on AWS Lambda. I choose the AI safety agent and run a check on a six-second clip from the cell camera. OpenCV 5 analyses every frame inside Lambda, then a tool-using agent on Amazon Bedrock decides what to do about each person. |
+| 4 | Live app: outcome and annotated clip | The outcome comes first. One protective stop, two entries that need a supervisor, and one that was only logged. In the clip, every person gets a track. Amber means inside the zone. Red means the intrusion has lasted a second and a half, which is when it counts. |
+| 5 | Live app: evidence for T2 (stop) and T4 (close-up avoids a false stop) | Every decision carries its evidence. T2 has no vest, and a close-up re-inspection confirmed it, so the robot stops, an alert goes out through SNS, and the evidence frame is stored in S3. T4 is the interesting one. In the wide view its vest is in the robot's shadow, so it reads as missing. The agent asked OpenCV to look again up close, found the vest, and called a supervisor instead of stopping the line. |
+| 6 | Live app: supervisor approves T1 | Supervisors close the loop. Approving T1 writes the answer to S3 and announces it on the alert topic. Only the first answer counts. |
+| 7 | Live app: agent steps, scenario check, dark mode | Every step the agent took is visible: the OpenCV scene report, each inspection, and each action. Those actions pass through guardrails written in code. A stop needs a verified intrusion and a confirmed missing vest. The scenario check compares every decision with the known answer. |
+| 8 | Live agent trace (docs/TRACE_EXAMPLE.json) | Here is an unedited trace from another live run. The close-up at step three turned a would-be false stop into a supervisor call. At step eight, the model tried to simply log a verified intrusion. The guardrail blocked it, so it escalated instead. If the model leaves anyone unresolved, a controller sends it back, and if Bedrock is unavailable, a fixed policy runs the same tools under the same guardrails. |
+| 9 | AWS architecture | Under the hood, one Lambda function behind a Function URL serves both the app and the API. It runs OpenCV 5, calls Amazon Nova Pro through the Bedrock Converse API, stores evidence in an encrypted S3 bucket, sends alerts through SNS, caps public usage with DynamoDB, and reports metrics, alarms and traces to CloudWatch and X-Ray. All of it is one CloudFormation template. |
+| 10 | OpenCV 5 pipeline (real intermediate images) | The perception is classical OpenCV 5, with no trained model. A bumped camera makes naive differencing light up every edge. So each frame is registered to the empty-cell reference with phase correlation and ECC, lighting is compensated, and the difference is cleaned with Otsu thresholding and morphology. Groups are split per head, and anything large that isn't an upright person is still treated as a person. |
+| 11 | Measured results | We measured everything. In ten live Bedrock runs, every decision was correct, with no false stops and no missed stops, and the guardrails blocked four unsafe actions along the way. Sixteen of seventeen stress variants were fully correct, and the one failure, a vest in very deep shadow, fails safe. Remove the close-up step, and the shadowed contractor gets a false stop. Remove registration and splitting, and six variants miss a stop. Inside Lambda, perception runs at about forty-nine frames per second. |
+| 12 | Responsible use and close | EdgeSentry is decision support, not a certified safety function, so the hardware interlocks stay. It never stops without proof, never ignores presence, and leaves entries to people. The code, the technical report and the evaluation are on GitHub. Thanks for watching. |
