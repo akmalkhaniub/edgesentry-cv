@@ -71,7 +71,8 @@ flowchart TD
   A -->|stopped with workers unresolved| N[Controller nudge]
   N --> A
   X --> H[Supervisor: approve entry / stop robot]
-  A -.->|model unavailable or incomplete| P[Fixed policy<br/>same tools, same guardrails]
+  A -.->|model unavailable, or it decided nothing| P[Fixed policy<br/>same tools, same guardrails]
+  A -.->|model left some tracks open| Q[Fixed policy finishes only those tracks]
 ```
 
 ## Run it

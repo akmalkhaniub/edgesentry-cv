@@ -102,7 +102,8 @@ flowchart TD
   A -->|stops with tracks unresolved| N[Controller: names the unresolved tracks,<br/>attaches their evidence, forces a tool call]
   N --> A
   X --> H[Supervisor: approve entry / stop robot]
-  A -.->|model unavailable or still incomplete| P[Fixed policy: same tools, same guardrails]
+  A -.->|model unavailable, or it decided nothing| P[Fixed policy: same tools, same guardrails]
+  A -.->|model left some tracks open| Q[Fixed policy finishes only those tracks]
 ```
 
 **The agent never sees pixels.** It acts only through tools whose outputs come from OpenCV:
@@ -124,8 +125,10 @@ fixed policy:
 A blocked action is returned to the model as a tool error with the reason, so it can correct
 itself. The **controller** checks that every zone track was resolved; if the model stops
 early, it names the missing tracks with their evidence and forces a tool call (at most two
-nudges). If the model is unavailable, errors, or is still incomplete, a deterministic policy
-re-runs with fresh tools and the same guardrails, and the UI says so.
+nudges). If tracks are still open but the model already decided others, the fixed policy
+finishes only the open tracks, on the same tools, so alerts already sent are not sent again.
+The page says which tracks the policy finished. If the model is unavailable, errors, or
+decides nothing, the policy re-runs the whole clip with fresh tools, and the UI says so.
 
 **How OpenCV output changes later actions.** From a live run (`docs/TRACE_EXAMPLE.json`,
 Amazon Nova Pro, unedited):
@@ -311,7 +314,9 @@ the time; fallbacks are now logged as structured `agent_fallback` warnings in Cl
   clip. Evidence frames are private, encrypted, shared only by 1-hour links, and expire after
   30 days. A real deployment needs worker notice and consultation, and local legal review.
 * **Honest labelling.** When the AI agent did not decide, the UI says the fixed policy did,
-  and why. Model output is never presented as verified fact.
+  and why. If the agent decided some tracks and left others open, those leftover tracks are
+  labelled “Fixed policy” and the rest stay labelled as the agent’s. Model output is never
+  presented as verified fact.
 * **Cost and abuse controls.** The public endpoint has reserved concurrency and DynamoDB daily
   caps on runs and on AI-agent runs.
 

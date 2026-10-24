@@ -321,6 +321,7 @@ class AgentRun:
     steps: int
     latency_ms: int
     fallback_reason: str | None = None
+    completed_by_policy: list[str] = field(default_factory=list)
 
 
 _PLAIN_ACTION = {"trigger_estop_alert": "Protective stop", "request_supervisor_approval": "Supervisor approval",
@@ -344,39 +345,69 @@ def summarize_decisions(tools: SafetyTools) -> str:
     return "\n".join(lines)
 
 
+def _policy_resolve(tools: SafetyTools, track: dict, call: Callable[..., dict]) -> None:
+    """One track, deterministic policy. Skips tracks that already have an action."""
+    tid = track["track_id"]
+    if tid in tools.decisions or not track["entered_zone"]:
+        return
+    if not track["persistence_verified"]:
+        call("log_and_monitor", {"track_id": tid, "reason": f"In the cell for only {track['time_in_zone_s']:.2f} s, below the 1.5 s persistence threshold, so no stop."},
+             "Brief entry: under the persistence threshold.")
+        return
+    if track["coarse_ppe_status"] != "compliant":
+        insp = call("inspect_worker", {"track_id": tid},
+                    f"Wide-view vest check reads '{track['coarse_ppe_status']}' ({track['coarse_vest_ratio']:.0%} hi-vis); confirm up close before stopping the line.")
+        if not insp.get("vest_present"):
+            call("trigger_estop_alert", {"track_id": tid, "reason": f"Verified {track['time_in_zone_s']:.2f} s in the cell, and the close-up confirms no hi-vis vest ({insp.get('vest_coverage', 0):.0%} of torso)."},
+                 "The close-up confirmed the violation.")
+            return
+        call("request_supervisor_approval", {"track_id": tid, "reason": f"The wide view missed the vest, but the close-up found it ({insp.get('vest_coverage', 0):.0%} of torso); likely an authorized entry."},
+             "The close-up overturned the wide-view reading, avoiding a false stop.")
+        return
+    call("request_supervisor_approval", {"track_id": tid, "reason": f"Verified {track['time_in_zone_s']:.2f} s in the cell wearing PPE; confirm this is authorized maintenance."},
+         "Verified entry by a worker wearing PPE.")
+
+
+def _traced_call(tools: SafetyTools, trace: list[dict], by: str | None = None) -> Callable[..., dict]:
+    def call(name: str, args: dict, why: str) -> dict:
+        out = tools.call(name, args)
+        step = {"step": len(trace) + 1, "tool": name, "input": args, "why": why, "output": out}
+        if by:
+            step["by"] = by
+        trace.append(step)
+        return out
+    return call
+
+
 def run_rules(tools: SafetyTools) -> AgentRun:
     """Deterministic policy driving the same tools (offline fallback)."""
     t0 = time.perf_counter()
     trace: list[dict] = []
-
-    def call(name: str, args: dict, why: str) -> dict:
-        out = tools.call(name, args)
-        trace.append({"step": len(trace) + 1, "tool": name, "input": args, "why": why, "output": out})
-        return out
-
+    call = _traced_call(tools, trace)
     report = call("get_scene_report", {}, "Perceive: run the OpenCV 5 pipeline over the clip.")
-    for t in report["tracks"]:
-        tid = t["track_id"]
-        if not t["entered_zone"]:
-            continue
-        if not t["persistence_verified"]:
-            call("log_and_monitor", {"track_id": tid, "reason": f"In the cell for only {t['time_in_zone_s']:.2f} s, below the 1.5 s persistence threshold, so no stop."},
-                 "Brief entry: under the persistence threshold.")
-            continue
-        if t["coarse_ppe_status"] != "compliant":
-            insp = call("inspect_worker", {"track_id": tid},
-                        f"Wide-view vest check reads '{t['coarse_ppe_status']}' ({t['coarse_vest_ratio']:.0%} hi-vis); confirm up close before stopping the line.")
-            if not insp.get("vest_present"):
-                call("trigger_estop_alert", {"track_id": tid, "reason": f"Verified {t['time_in_zone_s']:.2f} s in the cell, and the close-up confirms no hi-vis vest ({insp.get('vest_coverage', 0):.0%} of torso)."},
-                     "The close-up confirmed the violation.")
-                continue
-            call("request_supervisor_approval", {"track_id": tid, "reason": f"The wide view missed the vest, but the close-up found it ({insp.get('vest_coverage', 0):.0%} of torso); likely an authorized entry."},
-                 "The close-up overturned the wide-view reading, avoiding a false stop.")
-            continue
-        call("request_supervisor_approval", {"track_id": tid, "reason": f"Verified {t['time_in_zone_s']:.2f} s in the cell wearing PPE; confirm this is authorized maintenance."},
-             "Verified entry by a worker wearing PPE.")
+    for track in report["tracks"]:
+        _policy_resolve(tools, track, call)
     return AgentRun(mode="rules", model_id=None, trace=trace, decisions=dict(tools.decisions), blocked=list(tools.blocked),
                     summary=summarize_decisions(tools), steps=len(trace), latency_ms=int((time.perf_counter() - t0) * 1000))
+
+
+def _finish_open_tracks(run: AgentRun, tools: SafetyTools, reason: str) -> None:
+    """Apply the fixed policy only to tracks the model left open. Already-executed actions stay put."""
+    pending = _unresolved(tools)
+    report = {t["track_id"]: t for t in tools.get_scene_report()["tracks"]}
+    call = _traced_call(tools, run.trace, by="policy")
+    finished: list[str] = []
+    for tid in pending:
+        _policy_resolve(tools, report[tid], call)
+        if tid in tools.decisions:
+            finished.append(tid)
+    run.decisions = dict(tools.decisions)
+    run.blocked = list(tools.blocked)
+    run.steps = len(run.trace)
+    run.completed_by_policy = finished
+    run.fallback_reason = reason
+    if not run.summary:
+        run.summary = summarize_decisions(tools)
 
 
 _TAG = re.compile(r"</?(thinking|shift_summary|summary|answer)>", re.IGNORECASE)
@@ -444,19 +475,32 @@ def run_bedrock(tools: SafetyTools, client: Any, model_id: str = DEFAULT_MODEL_I
 
 def run_agent(perception: Perception, sink: ActionSink | None = None, client: Any = None,
               model_id: str = DEFAULT_MODEL_ID, prefer: str = "bedrock") -> tuple[AgentRun, SafetyTools]:
-    """Run the agent; fall back to the rule policy (fresh tools) if Bedrock is unavailable or errors."""
+    """Run the agent.
+
+    A complete Bedrock run is returned as-is. If the model resolves some tracks and
+    leaves others open, the fixed policy finishes only the open tracks on the same
+    tools (so alerts already sent are not sent again). A run that decides nothing,
+    or a Bedrock error before any decision, falls back to a fresh rules run.
+    """
     if prefer == "bedrock" and client is not None:
         tools = SafetyTools(perception, sink)
         try:
             run = run_bedrock(tools, client, model_id)
-            # Every zone track must be resolved; otherwise the LLM run is incomplete → fall back.
             unresolved = _unresolved(tools)
             if not unresolved:
+                return run, tools
+            if tools.decisions:
+                _finish_open_tracks(run, tools, f"The agent left {unresolved} unresolved after nudges.")
                 return run, tools
             reason = f"LLM left tracks unresolved after nudges: {unresolved}"
         except Exception as exc:  # pragma: no cover - network path
             reason = f"Bedrock unavailable: {type(exc).__name__}: {exc}"[:300]
-        # Fresh tools so no half-finished LLM action leaks into the fallback run.
+            if tools.decisions:
+                run = AgentRun(mode="bedrock", model_id=model_id, trace=[], decisions=dict(tools.decisions),
+                               blocked=list(tools.blocked), summary="", steps=0, latency_ms=0)
+                _finish_open_tracks(run, tools, reason)
+                return run, tools
+        # Nothing the model decided is kept: start clean so a half-failed call cannot leak.
         tools = SafetyTools(perception, RecordingSink() if sink is None else sink)
         run = run_rules(tools)
         run.fallback_reason = reason

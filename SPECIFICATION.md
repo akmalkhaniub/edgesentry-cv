@@ -22,6 +22,7 @@ CloudWatch Logs. Responses carry `nosniff`, `no-referrer`, `DENY` framing and `n
 | `run_id` | `YYYYMMDD-HHMMSS-xxxxxx` |
 | `decision_mode`, `requested_mode` | Who decided (`bedrock` or `rules`) and what was asked for |
 | `fallback_reason`, `fallback_notice` | Why the fixed policy decided instead of the agent, for logs and for people |
+| `completed_by_policy` | Track ids the fixed policy finished after the agent left them open. Empty when the agent finished the run, or when the whole run fell back |
 | `summary` | Markdown, one line per decision, generated from executed actions and measured evidence |
 | `agent_notes` | The model's own closing note (not verified; AI mode only) |
 | `decisions[]` | `track_id`, `action`, `action_label`, `reason`, `evidence` (time in zone, verified, coarse PPE, hard hat, shape), `inspection` (close-up result), `delivery` (S3 key, presigned URL, SNS message id), `evidence_image` (JPEG, base64), `evidence_frame`, `ground_truth` |

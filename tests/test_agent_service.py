@@ -122,7 +122,35 @@ def test_incomplete_llm_run_falls_back_to_rules(perception):
     client = ScriptedBedrock([[_use("get_scene_report")], [{"text": "ok"}], [{"text": "ok"}], [{"text": "ok"}]])
     run, tools = run_agent(perception, client=client, prefer="bedrock")
     assert run.mode == "rules" and "unresolved" in run.fallback_reason
+    assert run.completed_by_policy == []
     assert len(tools.decisions) == 4  # fresh tools: the fallback resolved everything itself
+
+
+def test_partial_agent_keeps_its_decisions_and_policy_finishes_the_rest(perception):
+    client = ScriptedBedrock([
+        [_use("get_scene_report")],
+        [_use("request_supervisor_approval", track_id="T1", reason="ppe"),
+         _use("inspect_worker", track_id="T2"),
+         _use("log_and_monitor", track_id="T3", reason="brief")],
+        [_use("trigger_estop_alert", track_id="T2", reason="confirmed no vest")],
+        [{"text": "done"}],
+        [{"text": "still done"}],
+        [{"text": "stopping"}],
+    ])
+    sink = RecordingSink()
+    run, tools = run_agent(perception, sink=sink, client=client, prefer="bedrock")
+    assert run.mode == "bedrock"
+    assert run.completed_by_policy == ["T4"]
+    assert "T4" in run.fallback_reason
+    assert set(tools.decisions) == {"T1", "T2", "T3", "T4"}
+    assert tools.decisions["T4"]["action"] == "request_supervisor_approval"
+    actions = [f"{e['action']}:{e['track_id']}" for e in sink.events]
+    assert actions.count("request_supervisor_approval:T1") == 1
+    assert actions.count("trigger_estop_alert:T2") == 1
+    assert actions.count("log_and_monitor:T3") == 1
+    assert actions.count("request_supervisor_approval:T4") == 1
+    assert any(s.get("by") == "policy" and s["tool"] == "inspect_worker" for s in run.trace)
+    assert evaluate_run(perception, run, build_scenario().workers)["decision_accuracy"] == 1.0
 
 
 def test_bedrock_step_budget_is_bounded(perception):

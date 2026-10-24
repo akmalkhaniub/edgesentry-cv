@@ -440,7 +440,13 @@
     $('#runDetails').hidden = false;
     stop();
 
-    if (d.fallback_reason) {
+    var finishedByPolicy = d.completed_by_policy || [];
+    if (finishedByPolicy.length && d.decision_mode === 'bedrock') {
+      var whoFinished = finishedByPolicy.length === 1 ? finishedByPolicy[0] : finishedByPolicy.join(', ');
+      showNotice('<strong>The AI agent decided this run.</strong> It left ' + esc(whoFinished) +
+        ' unresolved, so the fixed policy finished ' + (finishedByPolicy.length === 1 ? 'that track' : 'those tracks') +
+        '. The other decisions are the agent’s.');
+    } else if (d.fallback_reason) {
       showNotice('<strong>The fixed safety policy made these decisions.</strong> ' +
         esc(d.fallback_notice || 'The AI agent did not complete this run.') + ' EdgeSentry used its deterministic rules instead.');
     }
@@ -448,7 +454,9 @@
     var counts = { trigger_estop_alert: 0, request_supervisor_approval: 0, log_and_monitor: 0 };
     d.decisions.forEach(function (x) { counts[x.action] = (counts[x.action] || 0) + 1; });
     var ev = d.evaluation, n = ev.rows.length, ok = ev.rows.filter(function (r) { return r.correct; }).length;
-    var who = d.decision_mode === 'bedrock' ? 'AI safety agent' : 'Fixed safety policy';
+    var who = d.decision_mode === 'bedrock'
+      ? (finishedByPolicy.length ? 'AI safety agent, with the fixed policy finishing ' + finishedByPolicy.join(', ') : 'AI safety agent')
+      : 'Fixed safety policy';
     $('#outcome').hidden = false;
     $('#outcome').innerHTML =
       tile('stop', counts.trigger_estop_alert, counts.trigger_estop_alert === 1 ? 'Protective stop' : 'Protective stops') +
@@ -522,8 +530,10 @@
         ? '<div class="human" data-track="' + esc(x.track_id) + '"><button class="btn" data-decide="approve">Approve entry</button>' +
           '<button class="btn danger" data-decide="stop">Stop the robot</button><span class="faint" data-result></span></div>' : '';
       var reason = x.reason ? '<details class="reason"><summary>Why this action</summary><p>' + esc(x.reason) + '</p></details>' : '';
+      var byPolicy = x.decided_by === 'policy';
       return '<article class="dec ' + a.cls + '" id="dec-' + esc(x.track_id) + '">' +
-        '<div class="dec-head"><span class="tid">' + esc(x.track_id) + '</span><span class="pill ' + a.cls + '">' + esc(x.action_label || a.label) + '</span></div>' +
+        '<div class="dec-head"><span class="tid">' + esc(x.track_id) + '</span><span class="pill ' + a.cls + '">' + esc(x.action_label || a.label) + '</span>' +
+        (byPolicy ? '<span class="pill log">Fixed policy</span>' : '') + '</div>' +
         '<div class="dec-body"><button class="thumb" data-frame="' + x.evidence_frame + '" title="Show this moment in the clip" aria-label="Show ' + esc(x.track_id) + ' in the clip">' +
         (x.evidence_image ? '<img alt="Evidence frame for ' + esc(x.track_id) + '" src="data:image/jpeg;base64,' + x.evidence_image + '">' : '') + '</button>' +
         decisionFacts(x) + '</div>' + callout + reason + deliveryLine(x) + human + '</article>';
@@ -533,6 +543,7 @@
 
   function stepView(s) {
     var o = s.output || {}, inp = s.input || {}, t = inp.track_id || o.track_id || '';
+    var policy = s.by === 'policy' ? 'Fixed policy · ' : '';
     if (s.tool === 'controller') return { cls: 'nudge', title: 'Controller reminder', out: 'Asked the agent to resolve ' + esc((inp.unresolved || []).join(', ')) };
     if (o.status === 'blocked_by_guardrail') {
       return { cls: 'blocked', title: 'Blocked: ' + (ACTION[s.tool] ? ACTION[s.tool].label : s.tool) + ' for ' + t, out: 'Guardrail: ' + esc(o.reason) };
@@ -540,13 +551,13 @@
     switch (s.tool) {
       case 'get_scene_report':
         var inZone = (o.zone_tracks_to_resolve || []).length;
-        return { cls: 'perceive', title: 'Read the OpenCV 5 scene report', out: (o.tracks || []).length + ' people tracked · ' + inZone + ' entered the zone' };
+        return { cls: 'perceive', title: policy + 'Read the OpenCV 5 scene report', out: (o.tracks || []).length + ' people tracked · ' + inZone + ' entered the zone' };
       case 'inspect_worker':
-        return { cls: 'perceive', title: 'Re-inspected ' + t + ' up close',
+        return { cls: 'perceive', title: policy + 'Re-inspected ' + t + ' up close',
           out: o.error ? esc(o.error) : (o.vest_present ? 'Vest found · ' + pct(o.vest_coverage) + ' of torso' : 'No vest · ' + pct(o.vest_coverage) + ' of torso') };
-      case 'trigger_estop_alert': return { cls: 'stop', title: 'Protective stop for ' + t, out: o.error ? esc(o.error) : 'Executed' };
-      case 'request_supervisor_approval': return { cls: 'approve', title: 'Asked a supervisor about ' + t, out: o.error ? esc(o.error) : 'Executed' };
-      case 'log_and_monitor': return { cls: 'log', title: 'Logged ' + t + ', kept monitoring', out: o.error ? esc(o.error) : 'Executed' };
+      case 'trigger_estop_alert': return { cls: 'stop', title: policy + 'Protective stop for ' + t, out: o.error ? esc(o.error) : 'Executed' };
+      case 'request_supervisor_approval': return { cls: 'approve', title: policy + 'Asked a supervisor about ' + t, out: o.error ? esc(o.error) : 'Executed' };
+      case 'log_and_monitor': return { cls: 'log', title: policy + 'Logged ' + t + ', kept monitoring', out: o.error ? esc(o.error) : 'Executed' };
       default: return { cls: '', title: s.tool, out: '' };
     }
   }
@@ -555,7 +566,8 @@
     $('#cTrace').textContent = d.trace.length;
     var blocks = d.guardrail_blocks.length;
     var head = '<p class="faint" style="margin:0 0 12px">' + (d.decision_mode === 'bedrock'
-      ? 'Each step is a tool the AI agent chose. OpenCV results shape what it does next; code guardrails can veto any action.'
+      ? 'Each step is a tool the AI agent chose. OpenCV results shape what it does next; code guardrails can veto any action.' +
+        ((d.completed_by_policy || []).length ? ' Steps marked “Fixed policy” finished tracks the agent left open.' : '')
       : 'Steps taken by the fixed safety policy, using the same tools and guardrails as the AI agent.') +
       (blocks ? ' <strong>' + blocks + ' action' + (blocks > 1 ? 's were' : ' was') + ' blocked.</strong>' : '') + '</p>';
     var items = d.trace.map(function (s) {

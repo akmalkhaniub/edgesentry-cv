@@ -54,8 +54,9 @@ step the agent took, and a check against ground truth.
   never sees pixels; it calls OpenCV tools (`get_scene_report`, `inspect_worker`) and action
   tools. Guardrails in code veto unproven stops, unverified approvals, and logging a verified
   intrusion. A controller sends the agent back when it leaves anyone unresolved. If Bedrock is
-  unavailable, a deterministic policy runs the same tools under the same guardrails, and the UI
-  says so.
+  unavailable or decides nothing, a deterministic policy runs the same tools under the same
+  guardrails, and the UI says so. If the agent leaves only some tracks open, the policy
+  finishes those tracks and the page names them.
 - **AWS.** One Lambda (Python 3.12) behind a Function URL serves the UI and API. S3 holds
   evidence (private, encrypted, expiring), SNS sends alerts (KMS), DynamoDB caps public usage
   per day, and CloudWatch handles EMF metrics, alarms, a dashboard and X-Ray. All of it is one
